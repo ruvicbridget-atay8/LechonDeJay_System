@@ -1,0 +1,647 @@
+
+/* components.css
+   Person B - Shared UI Kit
+*/
+
+/* ---------- STATUS CHIPS ---------- */
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 11px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-success {
+  color: #16834b;
+  background: #e5f6ec;
+}
+
+.status-danger {
+  color: #c83232;
+  background: #fdeaea;
+}
+
+.status-warning {
+  color: #a66b0b;
+  background: #fff3d8;
+}
+
+.status-info {
+  color: #2469b5;
+  background: #e7f1ff;
+}
+
+.status-muted {
+  color: #667085;
+  background: #edf0f3;
+}
+
+/* ---------- EMPTY STATE ---------- */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 38px 20px;
+  text-align: center;
+  color: #667085;
+}
+
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: #f1f3f6;
+  font-size: 25px;
+  color: #8993a4;
+}
+
+.empty-state h3 {
+  margin: 0 0 6px;
+  color: #344054;
+  font-size: 16px;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* ---------- MODAL / POP-UP ---------- */
+
+.shared-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(16, 24, 40, 0.55);
+  animation: modalFadeIn 0.2s ease;
+}
+
+.shared-modal {
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 15px 45px rgba(0, 0, 0, 0.18);
+  animation: modalSlideIn 0.2s ease;
+}
+
+.shared-modal-small {
+  max-width: 400px;
+}
+
+.shared-modal-medium {
+  max-width: 600px;
+}
+
+.shared-modal-large {
+  max-width: 850px;
+}
+
+.shared-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 18px 22px;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.shared-modal-header h2 {
+  margin: 0;
+  color: #202939;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.shared-modal-body {
+  padding: 22px;
+  overflow-y: auto;
+}
+
+.modal-close {
+  width: 35px;
+  height: 35px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #667085;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background: #f2f4f7;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- TABLE ---------- */
+
+.shared-table {
+  width: 100%;
+  background: #fff;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.table-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: min(100%, 300px);
+  padding: 10px 13px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  color: #667085;
+  background: #fff;
+}
+
+.table-search:focus-within {
+  border-color: #b68a45;
+  box-shadow: 0 0 0 3px rgba(182, 138, 69, 0.12);
+}
+
+.table-search-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+}
+
+.table-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-chip {
+  padding: 7px 13px;
+  border: 1px solid #e0e3e8;
+  border-radius: 20px;
+  background: #fff;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.filter-chip:hover {
+  background: #f8f5ef;
+  border-color: #b68a45;
+}
+
+.filter-chip.is-active {
+  background: #8b2525;
+  border-color: #8b2525;
+  color: #fff;
+}
+
+/* Table wrapper */
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #eaecf0;
+  border-radius: 9px;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 600px;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.data-table th {
+  padding: 13px 15px;
+  background: #f8f9fb;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.data-table td {
+  padding: 13px 15px;
+  color: #344054;
+  font-size: 13px;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover {
+  background: #fcfaf7;
+}
+
+.data-table .clickable-row {
+  cursor: pointer;
+}
+
+/* Table footer and pagination */
+
+.table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.table-count {
+  color: #667085;
+  font-size: 12px;
+}
+
+.table-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 33px;
+  height: 33px;
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  background: #fff;
+  color: #475467;
+  cursor: pointer;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: #f8f5ef;
+}
+
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-number {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---------- RESPONSIVE ---------- */
+
+@media (max-width: 600px) {
+  .table-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .table-search {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .table-filters {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 5px;
+  }
+
+  .filter-chip {
+    flex-shrink: 0;
+  }
+
+  .shared-modal-overlay {
+    padding: 10px;
+  }
+
+  .shared-modal-body {
+    padding: 16px;
+  }
+
+  .table-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+
+/* ---------- ACCOUNTS FORM MODAL ---------- */
+
+.account-form-section {
+  margin-bottom: 24px;
+}
+
+.account-form-section h3 {
+  margin: 0 0 16px;
+  color: #344054;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.account-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 17px;
+}
+
+.account-form-group label {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.account-form-group .form-control {
+  width: 100%;
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.account-form-group .form-control:focus {
+  border-color: #8b2525;
+  box-shadow: 0 0 0 3px rgba(139, 37, 37, 0.10);
+}
+
+.account-form-group small {
+  color: #667085;
+  font-size: 11px;
+}
+
+.account-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 22px;
+  border-top: 1px solid #eaecf0;
+  background: #fcfcfd;
+}
+
+@media (max-width: 480px) {
+  .account-form-footer {
+    flex-direction: column-reverse;
+  }
+
+  .account-form-footer button {
+    width: 100%;
+  }
+}
+
+
+/* ---------- ACCOUNTS PAGE HEADER AND SEARCH ---------- */
+
+.accounts-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.accounts-page-header > div {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.accounts-page-header h1 {
+  color: var(--maroon);
+  font-size: 24px;
+  margin-bottom: 5px;
+}
+
+.accounts-page-header p {
+  font-size: 13px;
+}
+
+.accounts-page-header #add-account-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.accounts-toolbar {
+  display: flex;
+  width: 100%;
+  margin-bottom: 18px;
+}
+
+.accounts-search {
+  width: 100%;
+  max-width: 420px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .accounts-page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .accounts-page-header #add-account-btn {
+    width: 100%;
+  }
+
+  .accounts-search {
+    max-width: 100%;
+  }
+}
+
+
+/* ---------- ACCOUNTS PAGE LAYOUT ---------- */
+
+.accounts-page {
+  width: 100%;
+  min-width: 0;
+}
+
+.accounts-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  width: 100%;
+  margin-bottom: 22px;
+}
+
+.accounts-heading {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.accounts-heading h1 {
+  color: var(--maroon);
+  font-size: 24px;
+  margin-bottom: 5px;
+}
+
+.accounts-heading p {
+  font-size: 13px;
+}
+
+.accounts-add-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.accounts-toolbar {
+  display: flex;
+  width: 100%;
+  margin-bottom: 18px;
+}
+
+.accounts-search {
+  width: 100%;
+  max-width: 420px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.account-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-action-buttons .btn {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+@media (max-width: 600px) {
+  .accounts-page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .accounts-add-btn {
+    width: 100%;
+  }
+
+  .accounts-search {
+    max-width: 100%;
+  }
+}
+
+
+/* ---------- ACCOUNT MODAL BUTTON VISIBILITY ---------- */
+
+.shared-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.shared-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+}
+
+.shared-modal-header {
+  flex: 0 0 auto;
+}
+
+.shared-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.account-form-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 25px;
+  background: #fff;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 600px) {
+  .shared-modal-overlay {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .shared-modal {
+    max-height: calc(100dvh - 20px);
+  }
+
+  .account-form-footer {
+    flex-direction: column-reverse;
+    padding: 14px 18px;
+  }
+
+  .account-form-footer button {
+    width: 100%;
+  }
+}
