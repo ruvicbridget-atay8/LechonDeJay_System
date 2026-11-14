@@ -1,4 +1,4 @@
-// menu.js: the sidebar items for each role. Add or remove items here only.
+// menu.js: the sidebar items for each role.
 export const NAV = {
   Cashier: [
     { route: "pos",          label: "POS",               icon: "bi-cart3" },

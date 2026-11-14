@@ -16,4 +16,4 @@ function start() {
   renderShell(user, pages, start);
 }
 
-start();
+start();    
