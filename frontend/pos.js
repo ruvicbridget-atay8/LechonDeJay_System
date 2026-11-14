@@ -101,14 +101,6 @@ export function resetOrder() {
   checkout = emptyCheckout();
 }
 
-function showToast(msg) {
-  const t = document.createElement("div");
-  t.className = "toast";
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 3000);
-}
-
 export async function renderPos(container, user) {
   const [allProducts, types] = await Promise.all([api.getProducts(), api.getDiscountTypes()]);
   const products = allProducts.filter(sellable);
@@ -431,9 +423,9 @@ export async function renderPos(container, user) {
 
     placeBtn.disabled = true;
     try {
-      const saved = await api.saveTransaction(buildOrder(user));
+      await api.saveTransaction(buildOrder(user));
       resetOrder();
-      showToast(`Order #${saved.orderNumber} saved.`);
+      window.alert("Order Placed");
       location.hash = "#/transactions";
     } catch (err) {
       errorEl.textContent = err.message || "Could not save the order. Try again.";
