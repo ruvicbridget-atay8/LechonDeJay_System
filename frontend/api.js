@@ -5,7 +5,7 @@ const USERS = [
   { id: 2, username: "admin", password: "1234", name: "Sallie De Guzman", role: "Admin" },
 ];
 
-// Mock products. Prices are from the Figma. Stock numbers are samples.
+// Mock products. Stock numbers are samples.
 const PRODUCTS = [
   { sku: "MEL-001", name: "Lechon Budget Meal",   price: 99,   category: "Meals",               productType: "Finished good", status: "Available",   image: null, stock: 24, unit: "piece", reorderLevel: 5,  expiryDate: null },
   { sku: "SNK-001", name: "Cheese Burger",        price: 30,   category: "Snacks & Sides",      productType: "Finished good", status: "Available",   image: null, stock: 18, unit: "piece", reorderLevel: 5,  expiryDate: null },
@@ -65,4 +65,55 @@ export async function getProducts() {
 let nextNumber = 201;
 export function peekOrderNumbers() {
   return { transactionNo: nextNumber, orderNo: nextNumber };
+}
+
+const DISCOUNT_TYPES = [
+  { name: "Regular",       value: 0,  requiresId: false, active: true },
+  { name: "VIP",           value: 10, requiresId: false, active: true },
+  { name: "Promo",         value: 5,  requiresId: false, active: true },
+  { name: "Senior Citizen",value: 20, requiresId: true,  active: true },
+  { name: "PWD",           value: 20, requiresId: true,  active: true },
+];
+
+export async function getDiscountTypes() {
+  return DISCOUNT_TYPES.map((d) => ({ ...d }));
+}
+
+// ---------- Transactions (mock, the backend replaces this later) ----------
+const TRANSACTIONS = [];
+const STOCK_MOVEMENTS = [];
+
+export async function saveTransaction(order) {
+  const id = nextNumber++;
+  const now = new Date().toISOString();
+
+  const record = {
+    transactionId: id,          // assigned by the system (FR-06)
+    orderNumber: id,
+    dateTime: now,
+    status: "Completed",        // FR-15
+    voidRefundReason: "",
+    itemName: order.items.map((i) => `${i.qty}x ${i.name}`).join(", "),
+    ...order,                   // staff, orderType, items, subtotal, discount, total, payment, customer
+  };
+
+  // Deduct stock (FR-18) and log a Stock out entry with the reason Sale (FR-19).
+  order.items.forEach((line) => {
+    const product = PRODUCTS.find((p) => p.sku === line.sku);
+    if (product) product.stock = Math.max(0, product.stock - line.qty);
+    STOCK_MOVEMENTS.push({
+      movementType: "Stock out", sku: line.sku, quantity: line.qty,
+      reason: "Sale", dateTime: now, staff: order.staff,
+    });
+  });
+
+  TRANSACTIONS.unshift(record);
+  return { ...record };
+}
+
+// The Cashier sees only their own sales. The Admin sees all.
+export async function getTransactions(user) {
+  return TRANSACTIONS
+    .filter((t) => user.role === "Admin" || t.staff === user.name)
+    .map((t) => ({ ...t }));
 }
