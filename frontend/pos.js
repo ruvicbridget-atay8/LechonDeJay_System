@@ -2,40 +2,57 @@
 // Catalog (Seq. 13), cart (15), subtotal and discount (17), payment (19).
 import * as api from "./api.js";
 
-const CATEGORIES = ["All", "Meals", "Snacks & Sides", "Desserts and Drinks", "Whole Lechon"];
+const CATEGORIES = [
+  "All",
+  "Meals",
+  "Snacks & Sides",
+  "Desserts and Drinks",
+  "Whole Lechon",
+];
 
 // The SRS names the methods Cash, GCash/E-Wallet and Card (FR-10).
 const PAYMENT_METHODS = [
-  { value: "Cash",           label: "Cash",     icon: "bi-cash-stack" },
-  { value: "Card",           label: "Card",     icon: "bi-credit-card" },
+  { value: "Cash", label: "Cash", icon: "bi-cash-stack" },
+  { value: "Card", label: "Card", icon: "bi-credit-card" },
   { value: "GCash/E-Wallet", label: "E-Wallet", icon: "bi-phone" },
 ];
 
 const peso = (n) =>
-  "₱ " + Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  "₱ " +
+  Number(n).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 const esc = (s) =>
-  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  String(s).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
 // Only Available finished goods are sold at the counter (FR-04, FR-28).
-const sellable = (p) => p.status === "Available" && p.productType === "Finished good";
+const sellable = (p) =>
+  p.status === "Available" && p.productType === "Finished good";
 
 /* ---------- Order state (kept while the user moves between pages) ---------- */
 const emptyCheckout = () => ({
   discountType: "Regular",
-  discountId: "",          // Senior Citizen and PWD only (FR-08)
-  discountName: "",        // Senior Citizen and PWD only (FR-08)
-  customerName: "",        // optional (FR-09)
-  customerContact: "",     // optional (FR-09)
-  paymentMethod: "Cash",   // FR-10
-  amountReceived: "",      // typed by the Cashier, Cash only (FR-11)
+  discountId: "", // Senior Citizen and PWD only (FR-08)
+  discountName: "", // Senior Citizen and PWD only (FR-08)
+  customerName: "", // optional (FR-09)
+  customerContact: "", // optional (FR-09)
+  paymentMethod: "Cash", // FR-10
+  amountReceived: "", // typed by the Cashier, Cash only (FR-11)
 });
 
-let cart = [];            // { id, sku, name, price, qty, isAddon, parentId }
+let cart = []; // { id, sku, name, price, qty, isAddon, parentId }
 let orderType = "Dine In";
-let lastParentId = null;  // the last main item added: add-ons attach to it
+let lastParentId = null; // the last main item added: add-ons attach to it
 let lineCounter = 1;
 let checkout = emptyCheckout();
 let discountTypes = [];
@@ -43,10 +60,13 @@ let discountTypes = [];
 export const getCart = () => cart;
 export const getOrderType = () => orderType;
 export const getCheckout = () => checkout;
-export const getSubtotal = () => round2(cart.reduce((sum, l) => sum + l.price * l.qty, 0));
+export const getSubtotal = () =>
+  round2(cart.reduce((sum, l) => sum + l.price * l.qty, 0));
 export const getDiscountRate = () =>
-  (discountTypes.find((d) => d.name === checkout.discountType) || {}).value || 0;
-export const getDiscountAmount = () => round2((getSubtotal() * getDiscountRate()) / 100);
+  (discountTypes.find((d) => d.name === checkout.discountType) || {}).value ||
+  0;
+export const getDiscountAmount = () =>
+  round2((getSubtotal() * getDiscountRate()) / 100);
 export const getTotal = () => round2(getSubtotal() - getDiscountAmount());
 
 // Card and E-Wallet: the amount received equals the total (A-16).
@@ -66,8 +86,10 @@ export function checkoutErrors() {
   }
   if (!cart.length) errs.cart = "Add at least one item.";
   if (isCash()) {
-    if (checkout.amountReceived === "") errs.amount = "Enter the amount received.";
-    else if (getAmountReceived() < getTotal()) errs.amount = "The amount received is less than the total.";
+    if (checkout.amountReceived === "")
+      errs.amount = "Enter the amount received.";
+    else if (getAmountReceived() < getTotal())
+      errs.amount = "The amount received is less than the total.";
   }
   return errs;
 }
@@ -77,7 +99,14 @@ export function buildOrder(user) {
   return {
     staff: user.name,
     orderType,
-    items: cart.map((l) => ({ sku: l.sku, name: l.name, qty: l.qty, unitPrice: l.price, isAddon: l.isAddon, parentId: l.parentId })),
+    items: cart.map((l) => ({
+      sku: l.sku,
+      name: l.name,
+      qty: l.qty,
+      unitPrice: l.price,
+      isAddon: l.isAddon,
+      parentId: l.parentId,
+    })),
     subtotal: getSubtotal(),
     discountType: checkout.discountType,
     discountRate: getDiscountRate(),
@@ -100,9 +129,34 @@ export function resetOrder() {
   lastParentId = null;
   checkout = emptyCheckout();
 }
+// Popup shown after the order is saved. onClose runs when the Cashier taps OK.
+function showOrderPlaced({ orderNo, total, change }, onClose) {
+  const overlay = document.createElement("div");
+  overlay.className = "popup-overlay";
+  overlay.innerHTML = `
+    <div class="popup" role="dialog" aria-modal="true" aria-labelledby="popup-title">
+      <i class="bi bi-check-circle-fill popup-icon"></i>
+      <h2 id="popup-title">Order Placed</h2>
+      <p>Order# ${esc(orderNo)}</p>
+      <p>Total: <strong>${peso(total)}</strong></p>
+      ${change > 0 ? `<p>Change: <strong>${peso(change)}</strong></p>` : ""}
+      <button class="btn btn--primary btn--block" type="button">OK</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const okBtn = overlay.querySelector("button");
+  okBtn.focus();
+  okBtn.addEventListener("click", () => {
+    overlay.remove();
+    onClose();
+  });
+}
 
 export async function renderPos(container, user) {
-  const [allProducts, types] = await Promise.all([api.getProducts(), api.getDiscountTypes()]);
+  const [allProducts, types] = await Promise.all([
+    api.getProducts(),
+    api.getDiscountTypes(),
+  ]);
   const products = allProducts.filter(sellable);
   discountTypes = types.filter((t) => t.active);
 
@@ -116,8 +170,10 @@ export async function renderPos(container, user) {
           <input id="pos-search" type="search" placeholder="Search SKU, name or category" />
         </label>
         <div class="pos-chips" id="pos-chips">
-          ${CATEGORIES.map((c, i) => `
-            <button class="pos-chip${i === 0 ? " is-active" : ""}" type="button" data-cat="${esc(c)}">${esc(c)}</button>`).join("")}
+          ${CATEGORIES.map(
+            (c, i) => `
+            <button class="pos-chip${i === 0 ? " is-active" : ""}" type="button" data-cat="${esc(c)}">${esc(c)}</button>`,
+          ).join("")}
         </div>
         <div class="product-grid" id="pos-grid"></div>
       </section>
@@ -187,10 +243,12 @@ export async function renderPos(container, user) {
 
           <div class="co-section">Payment Method</div>
           <div class="pay-methods" id="pay-methods">
-            ${PAYMENT_METHODS.map((m) => `
+            ${PAYMENT_METHODS.map(
+              (m) => `
               <button class="pay-method" type="button" data-method="${esc(m.value)}">
                 <i class="bi ${m.icon}"></i><span>${esc(m.label)}</span>
-              </button>`).join("")}
+              </button>`,
+            ).join("")}
           </div>
 
           <div class="co-row">
@@ -223,25 +281,30 @@ export async function renderPos(container, user) {
   let category = "All";
   let query = "";
 
-    // If an image file is missing, show the gray placeholder instead.
-  grid.addEventListener("error", (e) => {
-    if (e.target.tagName !== "IMG") return;
-    console.warn("Image not found:", e.target.src);   // <-- shows the exact URL
-    const placeholder = document.createElement("div");
-    placeholder.className = "product-img";
-    placeholder.innerHTML = '<i class="bi bi-image"></i>';
-    e.target.replaceWith(placeholder);
-  }, true);
+  // If an image file is missing, show the gray placeholder instead.
+  grid.addEventListener(
+    "error",
+    (e) => {
+      if (e.target.tagName !== "IMG") return;
+      console.warn("Image not found:", e.target.src); // <-- shows the exact URL
+      const placeholder = document.createElement("div");
+      placeholder.className = "product-img";
+      placeholder.innerHTML = '<i class="bi bi-image"></i>';
+      e.target.replaceWith(placeholder);
+    },
+    true,
+  );
 
-  
   /* ---------- Catalog ---------- */
   function drawCatalog() {
     const q = query.trim().toLowerCase();
-    const list = products.filter((p) =>
-      (category === "All" || p.category === category) &&
-      (!q || p.name.toLowerCase().includes(q) ||
-             p.sku.toLowerCase().includes(q) ||
-             p.category.toLowerCase().includes(q))
+    const list = products.filter(
+      (p) =>
+        (category === "All" || p.category === category) &&
+        (!q ||
+          p.name.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          p.category.toLowerCase().includes(q)),
     );
 
     if (!list.length) {
@@ -249,16 +312,22 @@ export async function renderPos(container, user) {
       return;
     }
 
-    grid.innerHTML = list.map((p) => `
+    grid.innerHTML = list
+      .map(
+        (p) => `
       <button class="product" type="button" data-sku="${esc(p.sku)}">
-        ${p.image
-          ? `<img class="product-img" src="${esc(p.image)}" alt="" />`
-          : `<div class="product-img"><i class="bi bi-image"></i></div>`}
+        ${
+          p.image
+            ? `<img class="product-img" src="${esc(p.image)}" alt="" />`
+            : `<div class="product-img"><i class="bi bi-image"></i></div>`
+        }
         <div class="product-info">
           <span class="product-name">${esc(p.name)}</span>
           <span class="product-price">${peso(p.price)}</span>
         </div>
-      </button>`).join("");
+      </button>`,
+      )
+      .join("");
   }
 
   /* ---------- Cart ---------- */
@@ -276,16 +345,35 @@ export async function renderPos(container, user) {
         showNotice("Add a main item first, then add the add-on.");
         return;
       }
-      const same = cart.find((l) => l.sku === product.sku && l.parentId === lastParentId);
+      const same = cart.find(
+        (l) => l.sku === product.sku && l.parentId === lastParentId,
+      );
       if (same) same.qty += 1;
-      else cart.push({ id: lineCounter++, sku: product.sku, name: product.name, price: product.price, qty: 1, isAddon: true, parentId: lastParentId });
+      else
+        cart.push({
+          id: lineCounter++,
+          sku: product.sku,
+          name: product.name,
+          price: product.price,
+          qty: 1,
+          isAddon: true,
+          parentId: lastParentId,
+        });
     } else {
       const same = cart.find((l) => l.sku === product.sku && !l.isAddon);
       if (same) {
         same.qty += 1;
         lastParentId = same.id;
       } else {
-        const line = { id: lineCounter++, sku: product.sku, name: product.name, price: product.price, qty: 1, isAddon: false, parentId: null };
+        const line = {
+          id: lineCounter++,
+          sku: product.sku,
+          name: product.name,
+          price: product.price,
+          qty: 1,
+          isAddon: false,
+          parentId: null,
+        };
         cart.push(line);
         lastParentId = line.id;
       }
@@ -334,9 +422,11 @@ export async function renderPos(container, user) {
     } else {
       // Each main item is followed by its add-ons.
       const ordered = [];
-      cart.filter((l) => !l.isAddon).forEach((main) => {
-        ordered.push(main, ...cart.filter((l) => l.parentId === main.id));
-      });
+      cart
+        .filter((l) => !l.isAddon)
+        .forEach((main) => {
+          ordered.push(main, ...cart.filter((l) => l.parentId === main.id));
+        });
       linesBox.innerHTML = ordered.map(lineHtml).join("");
     }
     drawTotals();
@@ -369,9 +459,14 @@ export async function renderPos(container, user) {
 
   /* ---------- Payment ---------- */
   function drawPayment() {
-    document.querySelectorAll(".pay-method").forEach((b) =>
-      b.classList.toggle("is-active", b.dataset.method === checkout.paymentMethod)
-    );
+    document
+      .querySelectorAll(".pay-method")
+      .forEach((b) =>
+        b.classList.toggle(
+          "is-active",
+          b.dataset.method === checkout.paymentMethod,
+        ),
+      );
 
     const total = getTotal();
     hintEl.hidden = true;
@@ -399,7 +494,8 @@ export async function renderPos(container, user) {
       receivedInput.value = total.toFixed(2);
       changeEl.textContent = peso(0);
       changeEl.classList.remove("is-bad");
-      hintEl.textContent = "Confirm the payment was received before placing the order.";
+      hintEl.textContent =
+        "Confirm the payment was received before placing the order.";
       hintEl.hidden = false;
     }
 
@@ -411,23 +507,31 @@ export async function renderPos(container, user) {
   function bindField(id, key) {
     const el = document.getElementById(id);
     el.value = checkout[key];
-    el.addEventListener("input", () => { checkout[key] = el.value; el.classList.remove("is-invalid"); });
+    el.addEventListener("input", () => {
+      checkout[key] = el.value;
+      el.classList.remove("is-invalid");
+    });
   }
 
   /* ---------- Place Order and saves the sale) ---------- */
-   async function onPlaceOrder() {
+  async function onPlaceOrder() {
     errorEl.hidden = true;
-    document.querySelectorAll(".co-input").forEach((i) => i.classList.remove("is-invalid"));
+    document
+      .querySelectorAll(".co-input")
+      .forEach((i) => i.classList.remove("is-invalid"));
 
     const errs = checkoutErrors();
-    if (errs.discountId) document.getElementById("co-id").classList.add("is-invalid");
-    if (errs.discountName) document.getElementById("co-idname").classList.add("is-invalid");
+    if (errs.discountId)
+      document.getElementById("co-id").classList.add("is-invalid");
+    if (errs.discountName)
+      document.getElementById("co-idname").classList.add("is-invalid");
 
     const first = Object.values(errs)[0];
     if (first) {
-      errorEl.textContent = errs.discountId || errs.discountName
-        ? "Enter the discount ID number and ID name."
-        : first;
+      errorEl.textContent =
+        errs.discountId || errs.discountName
+          ? "Enter the discount ID number and ID name."
+          : first;
       errorEl.hidden = false;
       return;
     }
@@ -435,11 +539,14 @@ export async function renderPos(container, user) {
     placeBtn.disabled = true;
     try {
       await api.saveTransaction(buildOrder(user));
+      const summary = { orderNo, total: getTotal(), change: getChange() };
       resetOrder();
-      window.alert("Order Placed");
-      location.hash = "#/transactions";
+      showOrderPlaced(summary, () => {
+        location.hash = "#/transactions";
+      });
     } catch (err) {
-      errorEl.textContent = err.message || "Could not save the order. Try again.";
+      errorEl.textContent =
+        err.message || "Could not save the order. Try again.";
       errorEl.hidden = false;
       placeBtn.disabled = false;
     }
@@ -454,7 +561,9 @@ export async function renderPos(container, user) {
     const btn = e.target.closest(".pos-chip");
     if (!btn) return;
     category = btn.dataset.cat;
-    document.querySelectorAll(".pos-chip").forEach((c) => c.classList.toggle("is-active", c === btn));
+    document
+      .querySelectorAll(".pos-chip")
+      .forEach((c) => c.classList.toggle("is-active", c === btn));
     drawCatalog();
   });
 
@@ -474,7 +583,9 @@ export async function renderPos(container, user) {
   });
 
   typeSelect.value = orderType;
-  typeSelect.addEventListener("change", () => { orderType = typeSelect.value; });
+  typeSelect.addEventListener("change", () => {
+    orderType = typeSelect.value;
+  });
 
   discountSelect.value = checkout.discountType;
   discountSelect.addEventListener("change", () => {
@@ -509,11 +620,15 @@ export async function renderPos(container, user) {
   const tick = () => {
     timeEl.textContent = new Date()
       .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-      .replace(" ", "").toLowerCase();
+      .replace(" ", "")
+      .toLowerCase();
   };
   tick();
   const timer = setInterval(() => {
-    if (!document.body.contains(timeEl)) { clearInterval(timer); return; }
+    if (!document.body.contains(timeEl)) {
+      clearInterval(timer);
+      return;
+    }
     tick();
   }, 30000);
 
