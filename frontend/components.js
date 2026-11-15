@@ -1,6 +1,5 @@
 
 // components.js
-// Person B - Shared UI Kit
 // Reusable components for tables, pop-ups, status chips, and empty states.
 
 // ---------- HTML ESCAPING ----------

@@ -295,3 +295,99 @@ export async function getStockMovements() {
     };
   });
 }
+
+// ---------- Shifts , mock data only, for backend----------
+const dayKey = (value) => new Date(value).toLocaleDateString("en-CA"); // YYYY-MM-DD
+const money = (n) => Math.round(Number(n) * 100) / 100;
+const daysAgo = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return dayKey(d);
+};
+
+// Sample past shifts for Elle Santos (expected = opening + cash sales).
+const pastShift = (id, n, opening, salesCount, cashSales, actual) => ({
+  shiftId: id, staff: "Elle Santos", shiftDate: daysAgo(n),
+  openingCash: opening, salesCount, cashSales,
+  expectedCash: opening + cashSales, actualCash: actual,
+  cashDifference: actual - (opening + cashSales), status: "Closed",
+});
+
+const SHIFTS = [
+  pastShift(1, 6, 3500, 12, 1188, 4680),
+  pastShift(2, 5, 2000, 28, 5227, 7200),
+  pastShift(3, 4, 2000, 25, 4600, 6600),
+  pastShift(4, 3, 2200, 19, 3980, 6200),
+  pastShift(5, 2, 2000, 31, 5120, 7120),
+  pastShift(6, 1, 2000, 22, 4350, 6300),
+];
+let nextShiftId = 7;
+
+// The Cashier sees only their own shifts (NFR-05). The Admin sees all.
+export async function getShifts(user) {
+  return SHIFTS
+    .filter((s) => user.role === "Admin" || s.staff === user.name)
+    .sort((a, b) => b.shiftId - a.shiftId)
+    .map((s) => ({ ...s }));
+}
+
+// Start a shift with the opening cash (FR-56). One shift per cashier per day (A-09).
+export async function openShift(user, openingCash) {
+  const amount = Number(openingCash);
+  if (openingCash === "" || !Number.isFinite(amount) || amount < 0) {
+    throw new Error("Enter the opening cash.");
+  }
+  const today = dayKey(new Date());
+  if (SHIFTS.some((s) => s.staff === user.name && s.shiftDate === today)) {
+    throw new Error("You already have a shift today.");
+  }
+  const shift = {
+    shiftId: nextShiftId++, staff: user.name, shiftDate: today,
+    openingCash: money(amount), salesCount: 0, cashSales: 0,
+    expectedCash: money(amount), actualCash: null, cashDifference: null,
+    status: "Open",
+  };
+  SHIFTS.push(shift);
+  return { ...shift };
+}
+
+// Cash sales come from the saved transactions (FR-58), expected cash from them (FR-59).
+export async function getShiftSummary(user) {
+  const shift = SHIFTS.find((s) => s.staff === user.name && s.status === "Open");
+  if (!shift) throw new Error("No shift is open.");
+
+  const sales = (await getTransactions(user)).filter(
+    (t) => t.status === "Completed" && dayKey(t.dateTime) === shift.shiftDate
+  );
+  const cash = sales.filter((t) => t.paymentMethod === "Cash");
+  const cashSales = money(cash.reduce((sum, t) => sum + Number(t.total || 0), 0));
+
+  return {
+    openingCash: shift.openingCash,
+    salesCount: sales.length,
+    cashOrders: cash.length,
+    cashSales,
+    expectedCash: money(shift.openingCash + cashSales),
+  };
+}
+
+// Close the shift with the counted cash (FR-57, FR-59, FR-60).
+export async function closeShift(user, actualCash) {
+  const amount = Number(actualCash);
+  if (actualCash === "" || !Number.isFinite(amount) || amount < 0) {
+    throw new Error("Enter the cash counted.");
+  }
+  const shift = SHIFTS.find((s) => s.staff === user.name && s.status === "Open");
+  if (!shift) throw new Error("No shift is open.");
+
+  const summary = await getShiftSummary(user);
+  Object.assign(shift, {
+    salesCount: summary.salesCount,
+    cashSales: summary.cashSales,
+    expectedCash: summary.expectedCash,
+    actualCash: money(amount),
+    cashDifference: money(amount - summary.expectedCash),
+    status: "Closed",
+  });
+  return { ...shift };
+}
