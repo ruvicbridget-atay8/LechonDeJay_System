@@ -173,6 +173,7 @@ export async function updateUserStatus(id, active) {
 }
 
 // ---------- Products ----------
+// Today is 2026-11-15. The expiry flag shows "Expiring soon" within 3 days.
 const PRODUCTS = [
   { sku: "MEL-001", name: "Lechon Budget Meal", price: 99, category: "Meals", productType: "Finished good", status: "Available", image: null, stock: 24, unit: "piece", reorderLevel: 5, expiryDate: null },
   { sku: "SNK-001", name: "Cheese Burger", price: 30, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 18, unit: "piece", reorderLevel: 5, expiryDate: null },
@@ -180,25 +181,28 @@ const PRODUCTS = [
   { sku: "SNK-002", name: "Fries Platter", price: 249, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 12, unit: "tray", reorderLevel: 4, expiryDate: null },
   { sku: "MEL-003", name: "Lechon Meal Unli Rice", price: 129, category: "Meals", productType: "Finished good", status: "Available", image: null, stock: 20, unit: "piece", reorderLevel: 5, expiryDate: null },
   { sku: "SNK-003", name: "Crazy Loaded Nachos", price: 179, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 15, unit: "tray", reorderLevel: 5, expiryDate: null },
-  { sku: "DSR-001", name: "Fruit Salad", price: 79, category: "Desserts and Drinks", productType: "Finished good", status: "Available", image: null, stock: 10, unit: "piece", reorderLevel: 4, expiryDate: "2026-10-29" },
+  { sku: "DSR-001", name: "Fruit Salad", price: 79, category: "Desserts and Drinks", productType: "Finished good", status: "Available", image: null, stock: 10, unit: "piece", reorderLevel: 4, expiryDate: "2026-10-29" }, // already expired -> "Expired" flag
   { sku: "MEL-004", name: "Crew Meal", price: 200, category: "Meals", productType: "Finished good", status: "Available", image: null, stock: 9, unit: "piece", reorderLevel: 3, expiryDate: null },
-  { sku: "WLC-001", name: "Whole Lechon Baboy (Medium)", price: 6500, category: "Whole Lechon", productType: "Finished good", status: "Available", image: null, stock: 2, unit: "piece", reorderLevel: 1, expiryDate: null },
+  { sku: "WLC-001", name: "Whole Lechon Baboy (Medium)", price: 6500, category: "Whole Lechon", productType: "Finished good", status: "Available", image: null, stock: 2, unit: "piece", reorderLevel: 1, expiryDate: null, size: "Medium", kilos: 20, servingPax: 30 }, // Whole Lechon details (FR-24)
 
   // Add-ons
-  { sku: "SNK-004", name: "Cheese Sauce", price: 50, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 30, unit: "piece", reorderLevel: 10, expiryDate: null, isAddon: true },
-  { sku: "SNK-006", name: "Lechon Bites", price: 120, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 25, unit: "piece", reorderLevel: 8, expiryDate: null, isAddon: true },
+  { sku: "SNK-004", name: "Cheese Sauce", price: 50, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 30, unit: "piece", reorderLevel: 10, expiryDate: "2026-11-17", isAddon: true }, // 2 days left -> "Expiring soon" flag
+  { sku: "SNK-006", name: "Lechon Bites", price: 120, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 25, unit: "piece", reorderLevel: 8, expiryDate: "2026-11-25", isAddon: true }, // plenty of time -> date only, no flag
 
   // These must NOT show on the POS.
   { sku: "RAW-001", name: "Rice", price: 0, category: "Raw Materials", productType: "Raw material", status: "Available", image: null, stock: 8, unit: "kg", reorderLevel: 10, expiryDate: null },
   { sku: "DRK-001", name: "Refreshments", price: 35, category: "Desserts and Drinks", productType: "Finished good", status: "Unavailable", image: null, stock: 0, unit: "piece", reorderLevel: 10, expiryDate: null, isAddon: true },
   { sku: "SNK-005", name: "Onion Rings", price: 129, category: "Snacks & Sides", productType: "Finished good", status: "Archived", image: null, stock: 0, unit: "piece", reorderLevel: 5, expiryDate: null },
-];
+];  
 
 // Get products.
 export async function getProducts() {
-  return PRODUCTS.map((p) => ({ ...p }));
+  return PRODUCTS.map((p) => ({
+    ...p,
+    
+    image: p.image || `assets/productsimage/${p.sku}.jpg`,
+  }));
 }
-
 // ---------- Order and Transaction Numbers ----------
 let nextNumber = 201;
 
@@ -237,7 +241,7 @@ export async function updateDiscountType(name, active) {
 
 // ---------- Transactions and Stock Movements ----------
 const TRANSACTIONS = [];
-const STOCK_MOVEMENTS = [];
+const STOCK_MOVEMENTS = [{ dateTime: "2026-11-14T16:30:00", sku: "DSR-001", movementType: "Stock Out", quantity: 2, reason: "Expired", staff: "Sallie De Guzman" },];
 
 export async function saveTransaction(order) {
   const id = nextNumber++;

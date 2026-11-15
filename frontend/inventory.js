@@ -6,6 +6,27 @@ import {
   escapeHTML,
 } from "./components.js";
 
+// Reasons from SRS FR-32 that decide the flag. A newer Delivery clears it.
+const FLAG_REASONS = ["delivery", "expired", "spoilage"];
+
+// Returns { SKU: "Expired" | "Spoilage" } using each product's latest relevant movement.
+function buildFlags(movements) {
+  const latest = {};
+  for (const m of movements) {
+    const reason = String(m.reason || "").toLowerCase();
+    if (!FLAG_REASONS.includes(reason)) continue;
+    const time = new Date(m.dateTime).getTime();
+    if (!latest[m.sku] || time > latest[m.sku].time) latest[m.sku] = { time, reason };
+  }
+  const flags = {};
+  for (const [sku, { reason }] of Object.entries(latest)) {
+    if (reason === "expired") flags[sku] = "Expired";
+    if (reason === "spoilage") flags[sku] = "Spoilage";
+  }
+  return flags;
+}
+
+
 export async function renderInventory(container, user) {
   // Show a loading message while products are retrieved.
   container.innerHTML = `
@@ -15,7 +36,11 @@ export async function renderInventory(container, user) {
   `;
 
   try {
-    const products = await api.getProducts();
+        const [products, movements] = await Promise.all([
+      api.getProducts(),
+      api.getStockMovements(),
+    ]);
+    const flags = buildFlags(movements);
 
     // Calculate the display status based on product status and stock.
     const getProductStatus = (product) => {
@@ -71,16 +96,31 @@ export async function renderInventory(container, user) {
         },
         {
           key: "stock",
-          label: "Stock",
-          render: (product) =>
-            `${escapeHTML(product.stock)} ${escapeHTML(product.unit)}`,
+          label: "Current Stock",
+          render: (product) => escapeHTML(product.stock),
+        },
+        {
+          key: "unit",
+          label: "Unit",
+          render: (product) => escapeHTML(product.unit),
         },
         {
           key: "reorderLevel",
           label: "Reorder Level",
-          render: (product) =>
-            `${escapeHTML(product.reorderLevel)} ${escapeHTML(product.unit)}`,
+          render: (product) => escapeHTML(product.reorderLevel),
         },
+       {
+        key: "expiryDate",
+        label: "Expiry",
+        render: (product) =>
+          product.expiryDate
+            ? new Date(product.expiryDate + "T00:00:00").toLocaleDateString("en-PH", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              })
+            : "—",
+      },
         {
           key: "status",
           label: "Status",

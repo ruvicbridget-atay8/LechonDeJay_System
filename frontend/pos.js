@@ -223,6 +223,17 @@ export async function renderPos(container, user) {
   let category = "All";
   let query = "";
 
+    // If an image file is missing, show the gray placeholder instead.
+  grid.addEventListener("error", (e) => {
+    if (e.target.tagName !== "IMG") return;
+    console.warn("Image not found:", e.target.src);   // <-- shows the exact URL
+    const placeholder = document.createElement("div");
+    placeholder.className = "product-img";
+    placeholder.innerHTML = '<i class="bi bi-image"></i>';
+    e.target.replaceWith(placeholder);
+  }, true);
+
+  
   /* ---------- Catalog ---------- */
   function drawCatalog() {
     const q = query.trim().toLowerCase();
