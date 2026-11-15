@@ -10,7 +10,8 @@ import { renderTransactions } from "./transactions.js";
 import { renderShifts } from "./shifts.js";
 import { renderStock } from "./stock.js";
 import { renderDiscounts } from "./discounts.js";
-import { renderAccounts } from "./accounts.js";
+import { renderAccounts } from "./accounts.js"; 
+import {reenderReports} from "./reports.js";  
 
 
 const pages = {
@@ -21,6 +22,7 @@ const pages = {
   stock: renderStock,
   discounts: renderDiscounts,
   accounts: renderAccounts,
+  reports: reenderReports,
 };
 
 function start() {
