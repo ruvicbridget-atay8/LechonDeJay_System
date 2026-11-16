@@ -1,4 +1,3 @@
-
 // accounts.js: Admin account management page.
 
 import * as api from "./api.js";
@@ -77,17 +76,11 @@ function showAccountConfirmation(title, message, confirmLabel, onConfirm) {
     `,
   });
 
-  const confirmButton = modal.element.querySelector(
-    "#account-confirm-action"
-  );
+  const confirmButton = modal.element.querySelector("#account-confirm-action");
 
-  const cancelButton = modal.element.querySelector(
-    "#account-confirm-cancel"
-  );
+  const cancelButton = modal.element.querySelector("#account-confirm-cancel");
 
-  const errorMessage = modal.element.querySelector(
-    "#account-confirm-error"
-  );
+  const errorMessage = modal.element.querySelector("#account-confirm-error");
 
   cancelButton.addEventListener("click", () => modal.close());
 
@@ -138,25 +131,51 @@ export function renderAccounts(container, currentUser) {
         />
       </div>
 
-      <div class="table-responsive">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Full Name</th>
-              <th>Username</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="accounts-table-body"></tbody>
-        </table>
-      </div>
+            <section class="accounts-section">
+        <h2 class="accounts-section-title">
+          Active Accounts <span class="accounts-count" id="active-count"></span>
+        </h2>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Full Name</th>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="active-accounts-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="accounts-section">
+        <h2 class="accounts-section-title">
+          Deactivated Accounts <span class="accounts-count" id="inactive-count"></span>
+        </h2>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Full Name</th>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="inactive-accounts-body"></tbody>
+          </table>
+        </div>
+      </section>
 
     </div>
   `;
 
-  const tableBody = container.querySelector("#accounts-table-body");
+  const activeBody = container.querySelector("#active-accounts-body");
+  const inactiveBody = container.querySelector("#inactive-accounts-body");
   const searchInput = container.querySelector("#account-search");
 
   // ---------- LOAD ACCOUNTS ----------
@@ -178,67 +197,93 @@ export function renderAccounts(container, currentUser) {
   }
 
   // ---------- DISPLAY ACCOUNTS ----------
+  function accountRow(user) {
+    const isCurrentUser =
+      currentUser && String(currentUser.id) === String(user.id);
+
+    return `
+      <tr>
+        <td><strong>${escapeHTML(user.name)}</strong></td>
+        <td>${escapeHTML(user.username)}</td>
+        <td>${escapeHTML(user.role)}</td>
+        <td>
+          <span class="status-chip ${user.active ? "status-active" : "status-inactive"}">
+            ${user.active ? "Active" : "Deactivated"}
+          </span>
+        </td>
+        <td>
+          <div class="account-action-buttons">
+            <button
+              class="btn btn--soft edit-account-btn"
+              data-id="${escapeHTML(user.id)}"
+              type="button"
+            >
+              <i class="bi bi-pencil"></i>
+              Edit
+            </button>
+
+            <button
+              class="btn ${user.active ? "btn--soft" : "btn--primary"} toggle-account-btn"
+              data-id="${escapeHTML(user.id)}"
+              type="button"
+              ${isCurrentUser ? "disabled title='You cannot deactivate your own account.'" : ""}
+            >
+              ${user.active ? "Deactivate" : "Activate"}
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  function fillTable(body, users, emptyText) {
+    body.innerHTML = users.length
+      ? users.map(accountRow).join("")
+      : `
+        <tr>
+          <td colspan="5" style="text-align:center;padding:25px;">
+            ${emptyText}
+          </td>
+        </tr>
+      `;
+  }
+
   function displayAccounts(users, searchTerm = "") {
     const term = searchTerm.toLowerCase().trim();
 
     const filteredUsers = users.filter((user) => {
       return (
-        String(user.name || "").toLowerCase().includes(term) ||
-        String(user.username || "").toLowerCase().includes(term) ||
-        String(user.role || "").toLowerCase().includes(term) ||
-        (user.active ? "active" : "inactive").includes(term)
+        String(user.name || "")
+          .toLowerCase()
+          .includes(term) ||
+        String(user.username || "")
+          .toLowerCase()
+          .includes(term) ||
+        String(user.role || "")
+          .toLowerCase()
+          .includes(term)
       );
     });
 
-    if (!filteredUsers.length) {
-      tableBody.innerHTML = `
-        <tr>
-          <td colspan="5" style="text-align:center;padding:25px;">
-            No accounts found.
-          </td>
-        </tr>
-      `;
-      return;
-    }
+    const active = filteredUsers.filter((user) => user.active);
+    const inactive = filteredUsers.filter((user) => !user.active);
 
-    tableBody.innerHTML = filteredUsers.map((user) => {
-      const isCurrentUser =
-        currentUser && String(currentUser.id) === String(user.id);
+    fillTable(
+      activeBody,
+      active,
+      term ? "No active accounts match your search." : "No active accounts.",
+    );
 
-      return `
-        <tr>
-          <td><strong>${escapeHTML(user.name)}</strong></td>
-          <td>${escapeHTML(user.username)}</td>
-          <td>${escapeHTML(user.role)}</td>
-          <td>
-            <span class="status-chip ${user.active ? "status-active" : "status-inactive"}">
-              ${user.active ? "Active" : "Inactive"}
-            </span>
-          </td>
-          <td>
-            <div class="account-action-buttons">
-              <button
-                class="btn btn--soft edit-account-btn"
-                data-id="${escapeHTML(user.id)}"
-                type="button"
-              >
-                <i class="bi bi-pencil"></i>
-                Edit
-              </button>
+    fillTable(
+      inactiveBody,
+      inactive,
+      term
+        ? "No deactivated accounts match your search."
+        : "No deactivated accounts.",
+    );
 
-              <button
-                class="btn ${user.active ? "btn--soft" : "btn--primary"} toggle-account-btn"
-                data-id="${escapeHTML(user.id)}"
-                type="button"
-                ${isCurrentUser ? "disabled title='You cannot deactivate your own account.'" : ""}
-              >
-                ${user.active ? "Deactivate" : "Activate"}
-              </button>
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join("");
+    container.querySelector("#active-count").textContent = active.length;
+    container.querySelector("#inactive-count").textContent = inactive.length;
   }
 
   // ---------- SEARCH ----------
@@ -250,103 +295,103 @@ export function renderAccounts(container, currentUser) {
   });
 
   // ---------- TABLE ACTIONS ----------
-  tableBody.addEventListener("click", async (event) => {
-    const target = event.target instanceof Element
-      ? event.target
-      : event.target.parentElement;
+  container
+    .querySelector(".accounts-page")
+    .addEventListener("click", async (event) => {
+      const target =
+        event.target instanceof Element
+          ? event.target
+          : event.target.parentElement;
 
-    if (!target) return;
+      if (!target) return;
 
-    const editButton = target.closest(".edit-account-btn");
-    const toggleButton = target.closest(".toggle-account-btn");
+      const editButton = target.closest(".edit-account-btn");
+      const toggleButton = target.closest(".toggle-account-btn");
 
-    // EDIT ACCOUNT
-    if (editButton) {
-      try {
-        const users = await api.getUsers();
+      // EDIT ACCOUNT
+      if (editButton) {
+        try {
+          const users = await api.getUsers();
 
-        const user = users.find(
-          (item) => String(item.id) === editButton.dataset.id
-        );
-
-        if (user) {
-          showAccountForm(user);
-        } else {
-          showAccountNotice(
-            "Account Not Found",
-            "The selected account could not be found.",
-            "error"
+          const user = users.find(
+            (item) => String(item.id) === editButton.dataset.id,
           );
-        }
-      } catch (error) {
-        showAccountNotice(
-          "Unable to Open Account",
-          error.message || "Unable to retrieve account information.",
-          "error"
-        );
-      }
 
-      return;
-    }
-
-    // ACTIVATE / DEACTIVATE ACCOUNT
-    if (toggleButton) {
-      try {
-        const users = await api.getUsers();
-
-        const user = users.find(
-          (item) => String(item.id) === toggleButton.dataset.id
-        );
-
-        if (!user) {
-          showAccountNotice(
-            "Account Not Found",
-            "The selected account could not be found.",
-            "error"
-          );
-          return;
-        }
-
-        // Prevent changing the current user's own account.
-        if (
-          currentUser &&
-          String(currentUser.id) === String(user.id)
-        ) {
-          showAccountNotice(
-            "Action Not Allowed",
-            "You cannot deactivate your own account.",
-            "error"
-          );
-          return;
-        }
-
-        const action = user.active ? "deactivate" : "activate";
-        const newStatus = !user.active;
-
-        showAccountConfirmation(
-          `${user.active ? "Deactivate" : "Activate"} Account`,
-          `Are you sure you want to ${action} ${user.name}'s account?`,
-          user.active ? "Deactivate" : "Activate",
-          async () => {
-            await api.updateUserStatus(user.id, newStatus);
-
-            await loadAccounts();
-
+          if (user) {
+            showAccountForm(user);
+          } else {
             showAccountNotice(
-              "Account Updated",
-              `${user.name}'s account has been ${newStatus ? "activated" : "deactivated"} successfully.`
+              "Account Not Found",
+              "The selected account could not be found.",
+              "error",
             );
           }
-        );
-      } catch (error) {
-        showAccountNotice(
-          "Unable to Update Account",
-          error.message || "Unable to retrieve account information.",
-          "error"
-        );
+        } catch (error) {
+          showAccountNotice(
+            "Unable to Open Account",
+            error.message || "Unable to retrieve account information.",
+            "error",
+          );
+        }
+
+        return;
       }
-    }
-  });
+
+      // ACTIVATE / DEACTIVATE ACCOUNT
+      if (toggleButton) {
+        try {
+          const users = await api.getUsers();
+
+          const user = users.find(
+            (item) => String(item.id) === toggleButton.dataset.id,
+          );
+
+          if (!user) {
+            showAccountNotice(
+              "Account Not Found",
+              "The selected account could not be found.",
+              "error",
+            );
+            return;
+          }
+
+          // Prevent changing the current user's own account.
+          if (currentUser && String(currentUser.id) === String(user.id)) {
+            showAccountNotice(
+              "Action Not Allowed",
+              "You cannot deactivate your own account.",
+              "error",
+            );
+            return;
+          }
+
+          const action = user.active ? "deactivate" : "activate";
+          const newStatus = !user.active;
+
+          showAccountConfirmation(
+            `${user.active ? "Deactivate" : "Activate"} Account`,
+            `Are you sure you want to ${action} ${user.name}'s account?`,
+            user.active ? "Deactivate" : "Activate",
+            async () => {
+              await api.updateUserStatus(user.id, newStatus);
+
+              await loadAccounts();
+
+              showAccountNotice(
+                "Account Updated",
+                `${user.name}'s account has been ${newStatus ? "activated" : "deactivated"} successfully.`,
+              );
+            },
+          );
+        } catch (error) {
+          showAccountNotice(
+            "Unable to Update Account",
+            error.message || "Unable to retrieve account information.",
+            "error",
+          );
+        }
+      }
+    });
 
   // ---------- ACCOUNT FORM ----------
   function showAccountForm(user = null) {
@@ -368,9 +413,11 @@ export function renderAccounts(container, currentUser) {
             </h2>
 
             <p style="margin-top:5px;color:#667085;font-size:13px;">
-              ${editing
-                ? "Update the account information below."
-                : "Fill in the details to register a new user."}
+              ${
+                editing
+                  ? "Update the account information below."
+                  : "Fill in the details to register a new user."
+              }
             </p>
           </div>
 
@@ -442,15 +489,19 @@ export function renderAccounts(container, currentUser) {
                   name="password"
                   class="form-control"
                   type="password"
-                  placeholder="${editing
-                    ? "Leave blank to keep current password"
-                    : "Enter password"}"
+                  placeholder="${
+                    editing
+                      ? "Leave blank to keep current password"
+                      : "Enter password"
+                  }"
                   ${editing ? "" : "required"}
                 />
 
-                ${editing
-                  ? `<small>Leave blank if you do not want to change the password.</small>`
-                  : ""}
+                ${
+                  editing
+                    ? `<small>Leave blank if you do not want to change the password.</small>`
+                    : ""
+                }
               </div>
 
               <div class="account-form-group">
@@ -504,10 +555,12 @@ export function renderAccounts(container, currentUser) {
     const errorMessage = modal.querySelector("#account-form-error");
     const saveButton = modal.querySelector("#save-account-btn");
 
-    modal.querySelector("#close-account-form")
+    modal
+      .querySelector("#close-account-form")
       .addEventListener("click", closeModal);
 
-    modal.querySelector("#cancel-account")
+    modal
+      .querySelector("#cancel-account")
       .addEventListener("click", closeModal);
 
     modal.addEventListener("click", (event) => {
@@ -550,13 +603,11 @@ export function renderAccounts(container, currentUser) {
           editing ? "Account Updated" : "Account Created",
           editing
             ? "The account information has been updated successfully."
-            : "The new account has been created successfully."
+            : "The new account has been created successfully.",
         );
-
       } catch (error) {
         // Keep the form open and preserve entered values.
-        errorMessage.textContent =
-          error.message || "Unable to save account.";
+        errorMessage.textContent = error.message || "Unable to save account.";
 
         errorMessage.style.display = "block";
 
