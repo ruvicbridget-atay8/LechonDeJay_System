@@ -311,28 +311,41 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 33px;
-  height: 33px;
-  border: 1px solid #d0d5dd;
-  border-radius: 7px;
-  background: #fff;
-  color: #475467;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--red, #b90914);
+  border-radius: 8px;
+  background: var(--red, #b90914);
+  color: #fff;
+  font-size: 16px;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .page-btn:hover:not(:disabled) {
-  background: #f8f5ef;
+  background: var(--red-dark, #8f0710);
+  border-color: var(--red-dark, #8f0710);
 }
 
+.page-btn:focus-visible {
+  outline: 2px solid var(--maroon, #4a0a0e);
+  outline-offset: 2px;
+}
+
+/* No page to go to: pale red, still easy to see */
 .page-btn:disabled {
-  opacity: 0.4;
+  background: var(--red-tint, #fde9e6);
+  border-color: var(--red-line, #f0b8b3);
+  color: var(--red-line, #f0b8b3);
   cursor: not-allowed;
 }
 
 .page-number {
-  color: #475467;
-  font-size: 12px;
-  font-weight: 600;
+  min-width: 48px;
+  text-align: center;
+  color: var(--maroon, #4a0a0e);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 /* ---------- RESPONSIVE ---------- */
