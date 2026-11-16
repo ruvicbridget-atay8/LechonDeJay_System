@@ -1,5 +1,4 @@
 // pos.js: POS screen.
-// Catalog (Seq. 13), cart (15), subtotal and discount (17), payment (19).
 import * as api from "./api.js";
 
 const CATEGORIES = [
