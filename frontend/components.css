@@ -1999,3 +1999,23 @@
     gap: 4px;
   }
 }
+
+
+/* Transaction status badge at the top of the details modal */
+.transaction-status-top {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.transaction-status-top .transaction-status-completed,
+.transaction-status-top .transaction-status-reversed {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 13px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}

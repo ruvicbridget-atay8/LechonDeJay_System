@@ -80,6 +80,19 @@ function showTransactionDetails(transaction, user, container) {
     ? status === "voided" ? "Voided" : "Refunded"
     : "Completed Order";
 
+  // Status is now displayed immediately below the modal title.
+  const statusHTML = `
+    <div class="transaction-status-section transaction-status-top">
+      <span class="${
+        reversed
+          ? "transaction-status-reversed"
+          : "transaction-status-completed"
+      }">
+        ${escapeHTML(statusLabel)}
+      </span>
+    </div>
+  `;
+
   const requestContent = reversed
     ? `
       <section class="transaction-request-record">
@@ -143,6 +156,8 @@ function showTransactionDetails(transaction, user, container) {
     `;
 
   const content = `
+    ${statusHTML}
+
     <div class="transaction-receipt">
       <div class="transaction-receipt-header">
         <h2>Lechon De Jay</h2>
@@ -180,12 +195,6 @@ function showTransactionDetails(transaction, user, container) {
         <div class="transaction-total-due"><span>Total Due</span><strong>${formatCurrency(transaction.total)}</strong></div>
         <div><span>Amount Received</span><strong>${formatCurrency(getReceived(transaction))}</strong></div>
         <div><span>Change</span><strong>${formatCurrency(getChange(transaction))}</strong></div>
-      </div>
-
-      <div class="transaction-status-section">
-        <span class="${reversed ? "transaction-status-reversed" : "transaction-status-completed"}">
-          ${escapeHTML(statusLabel)}
-        </span>
       </div>
 
       ${requestContent}
