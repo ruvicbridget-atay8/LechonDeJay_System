@@ -1,8 +1,8 @@
-
 // transactions.js: transaction list shared by Cashiers and Admins.
 
 import * as api from "./api.js";
 import { renderApprovals } from "./approvals.js";
+import { showEditTransaction } from "./edit-transaction.js";
 import {
   renderTable,
   statusChip,
@@ -28,8 +28,7 @@ const formatDate = (dateTime) => {
   });
 };
 
-const getPayment = (t) =>
-  t.paymentMethod || t.payment || t.paymentType || "—";
+const getPayment = (t) => t.paymentMethod || t.payment || t.paymentType || "—";
 
 const getStatus = (t) =>
   String(t.requestStatus).toLowerCase() === "pending"
@@ -65,11 +64,7 @@ const getItemTotal = (item) =>
   );
 
 const getDiscountAmount = (transaction) =>
-  Number(
-    transaction.discountAmount ??
-      transaction.discount ??
-      0,
-  );
+  Number(transaction.discountAmount ?? transaction.discount ?? 0);
 
 const getDiscountLabel = (transaction) => {
   const type = String(transaction.discountType || "").trim();
@@ -79,9 +74,7 @@ const getDiscountLabel = (transaction) => {
     return "Discount";
   }
 
-  return rate > 0
-    ? `Discount (${type} - ${rate}%)`
-    : `Discount (${type})`;
+  return rate > 0 ? `Discount (${type} - ${rate}%)` : `Discount (${type})`;
 };
 
 // ---------- REQUEST SUCCESS POPUP ----------
@@ -151,27 +144,18 @@ function showRequestSuccess(container, user) {
     });
 }
 
-
 // ---------- TRANSACTION DETAILS ----------
 function showTransactionDetails(transaction, user, container) {
-  const items = Array.isArray(transaction.items)
-    ? transaction.items
-    : [];
+  const items = Array.isArray(transaction.items) ? transaction.items : [];
 
-  const status = String(
-    transaction.status || "Completed",
-  ).toLowerCase();
+  const status = String(transaction.status || "Completed").toLowerCase();
 
   const reversed = ["voided", "refunded"].includes(status);
 
-  const requestStatus = String(
-    transaction.requestStatus || "",
-  ).toLowerCase();
+  const requestStatus = String(transaction.requestStatus || "").toLowerCase();
 
   const reason =
-    transaction.voidRefundReason ||
-    transaction.requestReason ||
-    "";
+    transaction.voidRefundReason || transaction.requestReason || "";
 
   const itemsHTML = items.length
     ? items
@@ -308,13 +292,9 @@ function showTransactionDetails(transaction, user, container) {
           </form>
         `;
 
-  const customerName = String(
-    transaction.customerName || "",
-  ).trim();
+  const customerName = String(transaction.customerName || "").trim();
 
-  const customerContact = String(
-    transaction.customerContact || "",
-  ).trim();
+  const customerContact = String(transaction.customerContact || "").trim();
 
   const discountAmount = getDiscountAmount(transaction);
 
@@ -423,7 +403,13 @@ function showTransactionDetails(transaction, user, container) {
         </div>
       </div>
 
-      ${requestContent}
+            ${
+              user.role === "Admin" && !reversed && requestStatus !== "pending"
+                ? `<div class="approval-actions">
+             <button type="button" class="btn btn--primary" id="edit-transaction-btn">Edit Transaction</button>
+           </div>`
+                : requestContent
+            }
     </div>
   `;
 
@@ -435,9 +421,19 @@ function showTransactionDetails(transaction, user, container) {
 
   if (reversed || requestStatus === "pending") return;
 
-  const form = modal?.element?.querySelector(
-    "#void-refund-form",
-  );
+  if (user.role === "Admin") {
+    document
+      .getElementById("edit-transaction-btn")
+      ?.addEventListener("click", () => {
+        modal?.close?.();
+        showEditTransaction(transaction, user, () =>
+          renderTransactions(container, user),
+        );
+      });
+    return;
+  }
+
+  const form = modal?.element?.querySelector("#void-refund-form");
 
   if (!form) return;
 
@@ -447,13 +443,9 @@ function showTransactionDetails(transaction, user, container) {
     const requestType = form.elements.requestType.value;
     const reasonText = form.elements.reason.value.trim();
 
-    const errorElement = form.querySelector(
-      "#transaction-request-error",
-    );
+    const errorElement = form.querySelector("#transaction-request-error");
 
-    const submitButton = form.querySelector(
-      ".transaction-request-submit",
-    );
+    const submitButton = form.querySelector(".transaction-request-submit");
 
     errorElement.hidden = true;
 
@@ -520,9 +512,7 @@ export async function renderTransactions(container, user) {
       <div id="transactions-table"></div>
     `;
 
-    const tableContainer = container.querySelector(
-      "#transactions-table",
-    );
+    const tableContainer = container.querySelector("#transactions-table");
 
     renderTable(tableContainer, {
       columns: [
@@ -549,9 +539,7 @@ export async function renderTransactions(container, user) {
           label: "Items",
           render: (t) =>
             escapeHTML(
-              t.itemName ||
-                t.items?.map((item) => item.name).join(", ") ||
-                "—",
+              t.itemName || t.items?.map((item) => item.name).join(", ") || "—",
             ),
         },
         {
@@ -586,40 +574,31 @@ export async function renderTransactions(container, user) {
         {
           label: "Completed",
           value: "completed",
-          predicate: (t) =>
-            getStatus(t).toLowerCase() === "completed",
+          predicate: (t) => getStatus(t).toLowerCase() === "completed",
         },
         {
           label: "Pending",
           value: "pending",
-          predicate: (t) =>
-            getStatus(t).toLowerCase() === "pending",
+          predicate: (t) => getStatus(t).toLowerCase() === "pending",
         },
         {
           label: "Voided",
           value: "voided",
-          predicate: (t) =>
-            getStatus(t).toLowerCase() === "voided",
+          predicate: (t) => getStatus(t).toLowerCase() === "voided",
         },
         {
           label: "Refunded",
           value: "refunded",
-          predicate: (t) =>
-            getStatus(t).toLowerCase() === "refunded",
+          predicate: (t) => getStatus(t).toLowerCase() === "refunded",
         },
       ],
 
       pageSize: 8,
 
-      emptyMessage:
-        "No transactions have been recorded yet.",
+      emptyMessage: "No transactions have been recorded yet.",
 
       onRowClick: (transaction) => {
-        showTransactionDetails(
-          transaction,
-          user,
-          container,
-        );
+        showTransactionDetails(transaction, user, container);
       },
     });
 

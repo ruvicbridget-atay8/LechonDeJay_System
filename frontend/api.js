@@ -685,37 +685,36 @@ export async function saveTransaction(order) {
     };
   });
 
- 
-const amountReceived = Number(
-  order.amountTendered ??
-    order.amountReceived ??
-    order.cashReceived ??
-    order.amountPaid ??
-    order.received ??
-    0,
-);
+  const amountReceived = Number(
+    order.amountTendered ??
+      order.amountReceived ??
+      order.cashReceived ??
+      order.amountPaid ??
+      order.received ??
+      0,
+  );
 
-const record = {
-  ...order,
-  items: savedItems,
-  transactionId: id,
-  orderNumber: id,
-  dateTime: now,
-  status: "Completed",
-  requestType: "",
-  requestReason: "",
-  requestStatus: "None",
-  voidRefundReason: "",
-  itemName: savedItems.map((i) => `${i.qty}x ${i.name}`).join(", "),
-  paymentMethod:
-    order.paymentMethod || order.payment || order.paymentType || "—",
-  amountReceived,
-  change: Number(
-    order.change ??
-      order.changeAmount ??
-      Math.max(0, amountReceived - Number(order.total || 0)),
-  ),
-};
+  const record = {
+    ...order,
+    items: savedItems,
+    transactionId: id,
+    orderNumber: id,
+    dateTime: now,
+    status: "Completed",
+    requestType: "",
+    requestReason: "",
+    requestStatus: "None",
+    voidRefundReason: "",
+    itemName: savedItems.map((i) => `${i.qty}x ${i.name}`).join(", "),
+    paymentMethod:
+      order.paymentMethod || order.payment || order.paymentType || "—",
+    amountReceived,
+    change: Number(
+      order.change ??
+        order.changeAmount ??
+        Math.max(0, amountReceived - Number(order.total || 0)),
+    ),
+  };
 
   // Deduct stock and record stock movements.
   savedItems.forEach((line) => {
@@ -813,7 +812,7 @@ export async function getPendingRequests() {
     }));
 }
 
-// Approve a pending void or refund request (FR-43, FR-44).
+// Approve a pending void or refund request.
 // Only the transaction record changes. Stock is not touched.
 export async function approveTransactionRequest(transactionId, admin) {
   const transaction = TRANSACTIONS.find(
@@ -832,6 +831,173 @@ export async function approveTransactionRequest(transactionId, admin) {
   transaction.voidRefundReason = transaction.requestReason;
   transaction.approvedBy = String(admin || "Admin");
   transaction.approvedAt = new Date().toISOString();
+
+  return {
+    ...transaction,
+    items: transaction.items.map((item) => ({ ...item })),
+  };
+}
+
+// ---------- Admin: correct a completed transaction (FR-46) ----------
+export async function updateTransaction(transactionId, changes, admin) {
+  const transaction = TRANSACTIONS.find(
+    (t) => String(t.transactionId) === String(transactionId),
+  );
+
+  if (!transaction) throw new Error("Transaction not found.");
+
+  if (transaction.status !== "Completed") {
+    throw new Error("Only completed transactions can be corrected.");
+  }
+
+  if (transaction.requestStatus === "Pending") {
+    throw new Error("Resolve the pending void or refund request first.");
+  }
+
+  const reason = String(changes.reason || "").trim();
+  if (!reason) throw new Error("Enter the reason for the correction.");
+
+  const orderType = String(changes.orderType || "");
+  if (!["Dine In", "Take-out"].includes(orderType)) {
+    throw new Error("Select Dine In or Take-out.");
+  }
+
+  const quantities = changes.quantities;
+  if (
+    !Array.isArray(quantities) ||
+    quantities.length !== transaction.items.length
+  ) {
+    throw new Error("Invalid item quantities.");
+  }
+
+  quantities.forEach((q, i) => {
+    if (!Number.isInteger(Number(q)) || Number(q) < 1) {
+      throw new Error(`Invalid quantity for ${transaction.items[i].name}.`);
+    }
+  });
+
+  // Quantity change per product (positive = sold more, negative = sold less).
+  const deltas = {};
+  transaction.items.forEach((line, i) => {
+    deltas[line.sku] =
+      (deltas[line.sku] || 0) + (Number(quantities[i]) - Number(line.qty));
+  });
+
+  for (const [sku, delta] of Object.entries(deltas)) {
+    const product = PRODUCTS.find((p) => p.sku === sku);
+    if (product && delta > Number(product.stock)) {
+      throw new Error(
+        `Insufficient stock for ${product.name}. Available: ${product.stock}.`,
+      );
+    }
+  }
+
+  // Discount.
+  const type = DISCOUNT_TYPES.find((d) => d.name === changes.discountType);
+  if (!type) throw new Error("Select a valid discount type.");
+
+  const discountId = String(changes.discountId || "").trim();
+  const discountName = String(changes.discountName || "").trim();
+
+  if (type.requiresId && (!discountId || !discountName)) {
+    throw new Error("Enter the discount ID number and ID name.");
+  }
+
+  const rate =
+    changes.discountType === transaction.discountType &&
+    transaction.discountRate != null
+      ? Number(transaction.discountRate)
+      : type.value;
+
+  // New amounts.
+  const items = transaction.items.map((line, i) => {
+    const qty = Number(quantities[i]);
+    const price = Number(line.price ?? line.unitPrice ?? 0);
+    return { ...line, qty, price, lineTotal: money(price * qty) };
+  });
+
+  const subtotal = money(items.reduce((sum, line) => sum + line.lineTotal, 0));
+  const discountAmount = money((subtotal * rate) / 100);
+  const total = money(subtotal - discountAmount);
+
+  const isCash =
+    String(transaction.paymentMethod || "").toLowerCase() === "cash";
+  let received = total;
+
+  if (isCash) {
+    received = Number(changes.amountReceived);
+    if (
+      changes.amountReceived === "" ||
+      !Number.isFinite(received) ||
+      received < total
+    ) {
+      throw new Error("The amount received is less than the new total.");
+    }
+    received = money(received);
+  }
+
+  const change = isCash ? money(received - total) : 0;
+
+  // Keep the first version so the pop-up can show "Original".
+  if (!transaction.original) {
+    transaction.original = {
+      orderType: transaction.orderType,
+      discountType: transaction.discountType || "Regular",
+      items: transaction.items.map((l) => ({ sku: l.sku, qty: l.qty })),
+      total: transaction.total,
+    };
+  }
+
+  // Stock follows the corrected quantities.
+  const now = new Date().toISOString();
+
+  Object.entries(deltas).forEach(([sku, delta]) => {
+    if (!delta) return;
+
+    const product = PRODUCTS.find((p) => p.sku === sku);
+    if (!product) return;
+
+    const previousStock = Number(product.stock) || 0;
+    const newStock = Math.max(0, previousStock - delta);
+
+    product.stock = newStock;
+
+    if (product.status !== "Archived") {
+      product.status = newStock > 0 ? "Available" : "Unavailable";
+    }
+
+    STOCK_MOVEMENTS.unshift({
+      dateTime: now,
+      sku,
+      movementType: "Adjustment",
+      quantity: newStock - previousStock,
+      previousStock,
+      newStock,
+      reason: "Sale correction",
+      notes: `Transaction #${transaction.transactionId}: ${reason}`,
+      staff: String(admin || "Admin"),
+    });
+  });
+
+  Object.assign(transaction, {
+    orderType,
+    items,
+    itemName: items.map((i) => `${i.qty}x ${i.name}`).join(", "),
+    subtotal,
+    discountType: type.name,
+    discountRate: rate,
+    discountAmount,
+    discount: discountAmount,
+    discountId: type.requiresId ? discountId : "",
+    discountName: type.requiresId ? discountName : "",
+    total,
+    amountReceived: received,
+    amountTendered: received,
+    change,
+    correctionReason: reason,
+    correctedBy: String(admin || "Admin"),
+    correctedAt: now,
+  });
 
   return {
     ...transaction,

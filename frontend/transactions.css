@@ -61,6 +61,66 @@
   margin-top: 1rem;
 }
 
+/* Edit transaction (Admin) */
+.edit-field {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.75rem 0;
+}
+.edit-field label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--maroon);
+}
+.edit-field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.edit-field .input,
+.edit-field-row .input {
+  width: auto;
+  min-width: 10rem;
+}
+.edit-field textarea.input {
+  width: 100%;
+}
+.edit-original {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.edit-line {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fafafa;
+}
+.edit-line-top,
+.edit-line-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.edit-qty {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.edit-qty button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
 @media (max-width: 600px) {
   .transaction-table th,
   .transaction-table td {
