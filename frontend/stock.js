@@ -476,4 +476,3 @@ export async function renderStock(container, user) {
     `;
   }
 }
-
