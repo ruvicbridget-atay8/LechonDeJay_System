@@ -1005,6 +1005,51 @@ export async function updateTransaction(transactionId, changes, admin) {
   };
 }
 
+// ---------- Admin: void or refund directly, no request needed ----------
+export async function voidRefundTransaction(
+  transactionId,
+  type,
+  reason,
+  admin,
+) {
+  const transaction = TRANSACTIONS.find(
+    (t) => String(t.transactionId) === String(transactionId),
+  );
+
+  if (!transaction) throw new Error("Transaction not found.");
+
+  if (transaction.status !== "Completed") {
+    throw new Error("Only completed transactions can be voided or refunded.");
+  }
+
+  if (!["Void", "Refund"].includes(type)) {
+    throw new Error("Select Void or Refund.");
+  }
+
+  const cleanReason = String(reason || "").trim();
+  if (!cleanReason) throw new Error("Enter the reason.");
+
+  const now = new Date().toISOString();
+  const adminName = String(admin || "Admin");
+
+  Object.assign(transaction, {
+    status: type === "Void" ? "Voided" : "Refunded",
+    requestType: type,
+    requestReason: cleanReason,
+    requestStatus: "Approved",
+    requestedBy: adminName,
+    requestedAt: now,
+    voidRefundReason: cleanReason,
+    approvedBy: adminName,
+    approvedAt: now,
+  });
+
+  return {
+    ...transaction,
+    items: transaction.items.map((item) => ({ ...item })),
+  };
+}
+
 // ---------- Get Stock Movements ----------
 export async function getStockMovements() {
   return STOCK_MOVEMENTS.map((movement) => {

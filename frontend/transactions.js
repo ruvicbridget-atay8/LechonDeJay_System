@@ -298,6 +298,45 @@ function showTransactionDetails(transaction, user, container) {
 
   const discountAmount = getDiscountAmount(transaction);
 
+  const adminActionsHTML = `
+    <div class="approval-actions">
+      <button type="button" class="btn btn--soft" id="edit-transaction-btn">Edit Transaction</button>
+      <button type="button" class="btn btn--primary" id="admin-void-btn">Void / Refund</button>
+    </div>
+
+    <form id="admin-void-form" class="transaction-request-form" hidden>
+      <h3>Void / Refund</h3>
+
+      <div class="form-group">
+        <label for="admin-void-type">Type *</label>
+        <select id="admin-void-type" name="requestType" required>
+          <option value="">Select Void or Refund</option>
+          <option value="Void">Void</option>
+          <option value="Refund">Refund</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="admin-void-reason">Reason *</label>
+        <textarea
+          id="admin-void-reason"
+          name="reason"
+          rows="3"
+          maxlength="500"
+          placeholder="Explain the reason..."
+          required
+        ></textarea>
+      </div>
+
+      <p id="admin-void-error" class="transaction-request-error" role="alert" hidden></p>
+
+      <div class="approval-actions">
+        <button type="button" class="btn btn--soft" id="admin-void-cancel">Cancel</button>
+        <button type="submit" class="btn btn--primary" id="admin-void-submit">Apply</button>
+      </div>
+    </form>
+  `;
+
   const content = `
     <div class="transaction-status-section transaction-status-top">
       <span class="${
@@ -403,13 +442,7 @@ function showTransactionDetails(transaction, user, container) {
         </div>
       </div>
 
-            ${
-              user.role === "Admin" && !reversed && requestStatus !== "pending"
-                ? `<div class="approval-actions">
-             <button type="button" class="btn btn--primary" id="edit-transaction-btn">Edit Transaction</button>
-           </div>`
-                : requestContent
-            }
+                  ${user.role === "Admin" && !reversed && requestStatus !== "pending" ? adminActionsHTML : requestContent}
     </div>
   `;
 
@@ -422,6 +455,9 @@ function showTransactionDetails(transaction, user, container) {
   if (reversed || requestStatus === "pending") return;
 
   if (user.role === "Admin") {
+    const voidForm = document.getElementById("admin-void-form");
+    const voidBtn = document.getElementById("admin-void-btn");
+
     document
       .getElementById("edit-transaction-btn")
       ?.addEventListener("click", () => {
@@ -430,6 +466,56 @@ function showTransactionDetails(transaction, user, container) {
           renderTransactions(container, user),
         );
       });
+
+    voidBtn?.addEventListener("click", () => {
+      voidForm.hidden = false;
+      voidBtn.disabled = true;
+      voidForm.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+
+    document
+      .getElementById("admin-void-cancel")
+      ?.addEventListener("click", () => {
+        voidForm.hidden = true;
+        voidBtn.disabled = false;
+      });
+
+    voidForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const type = voidForm.elements.requestType.value;
+      const reasonText = voidForm.elements.reason.value.trim();
+      const errorEl = document.getElementById("admin-void-error");
+      const submitBtn = document.getElementById("admin-void-submit");
+
+      errorEl.hidden = true;
+
+      if (!type || !reasonText) {
+        errorEl.textContent = "Select Void or Refund and enter the reason.";
+        errorEl.hidden = false;
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Applying...";
+
+      try {
+        await api.voidRefundTransaction(
+          transaction.transactionId,
+          type,
+          reasonText,
+          user.name,
+        );
+        modal?.close?.();
+        await renderTransactions(container, user);
+      } catch (error) {
+        errorEl.textContent = error.message || "Unable to apply the change.";
+        errorEl.hidden = false;
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Apply";
+      }
+    });
+
     return;
   }
 
