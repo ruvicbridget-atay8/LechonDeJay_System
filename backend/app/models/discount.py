@@ -1,0 +1,1 @@
+# Holds discount_type_id, discount_name, and discount_value
