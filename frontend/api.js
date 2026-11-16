@@ -1,10 +1,23 @@
-
 // api.js: mock data for now.
 
 // ---------- Users ----------
 const USERS = [
-  { id: 1, username: "cashier", password: "1234", name: "Elle Santos", role: "Cashier", active: true },
-  { id: 2, username: "admin", password: "1234", name: "Sallie De Guzman", role: "Admin", active: true },
+  {
+    id: 1,
+    username: "cashier",
+    password: "1234",
+    name: "Elle Santos",
+    role: "Cashier",
+    active: true,
+  },
+  {
+    id: 2,
+    username: "admin",
+    password: "1234",
+    name: "Sallie De Guzman",
+    role: "Admin",
+    active: true,
+  },
 ];
 
 const SESSION_KEY = "lechon_session";
@@ -16,7 +29,7 @@ export async function login(username, password) {
     (u) =>
       u.username === username.trim().toLowerCase() &&
       u.password === password &&
-      u.active !== false
+      u.active !== false,
   );
 
   if (!user) {
@@ -62,7 +75,9 @@ export async function getUsers() {
 
 export async function addUser(userData) {
   const name = String(userData.name || "").trim();
-  const username = String(userData.username || "").trim().toLowerCase();
+  const username = String(userData.username || "")
+    .trim()
+    .toLowerCase();
   const password = String(userData.password || "");
   const role = userData.role;
 
@@ -109,7 +124,7 @@ export async function updateUser(id, updates) {
     if (!username) throw new Error("Username is required.");
 
     const duplicate = USERS.some(
-      (item) => item.id !== user.id && item.username.toLowerCase() === username
+      (item) => item.id !== user.id && item.username.toLowerCase() === username,
     );
 
     if (duplicate) throw new Error("Username already exists.");
@@ -137,22 +152,196 @@ export async function updateUserStatus(id, active) {
 
 // ---------- Products ----------
 const PRODUCTS = [
-  { sku: "MEL-001", name: "Lechon Budget Meal", price: 99, category: "Meals", productType: "Finished good", status: "Available", image: null, stock: 24, unit: "piece", reorderLevel: 5, expiryDate: null },
-  { sku: "SNK-001", name: "Cheese Burger", price: 30, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 18, unit: "piece", reorderLevel: 5, expiryDate: null },
-  { sku: "MEL-002", name: "Lechon Paksiw", price: 149, category: "Meals", productType: "Finished good", status: "Available", image: null, stock: 3, unit: "piece", reorderLevel: 5, expiryDate: null },
-  { sku: "SNK-002", name: "Fries Platter", price: 249, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 12, unit: "tray", reorderLevel: 4, expiryDate: null },
-  { sku: "MEL-003", name: "Lechon Meal Unli Rice", price: 129, category: "Meals", productType: "Finished good", status: "Available", image: null, stock: 20, unit: "piece", reorderLevel: 5, expiryDate: null },
-  { sku: "SNK-003", name: "Crazy Loaded Nachos", price: 179, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 15, unit: "tray", reorderLevel: 5, expiryDate: null },
-  { sku: "DSR-001", name: "Fruit Salad", price: 79, category: "Desserts and Drinks", productType: "Finished good", status: "Available", image: null, stock: 10, unit: "piece", reorderLevel: 4, expiryDate: "2026-10-29" },
-  { sku: "MEL-004", name: "Crew Meal", price: 200, category: "Meals", productType: "Finished good", status: "Available", image: null, stock: 9, unit: "piece", reorderLevel: 3, expiryDate: null },
-  { sku: "WLC-001", name: "Whole Lechon Baboy (Medium)", price: 6500, category: "Whole Lechon", productType: "Finished good", status: "Available", image: null, stock: 2, unit: "piece", reorderLevel: 1, expiryDate: null, size: "Medium", kilos: 20, servingPax: 30 },
+  {
+    sku: "MEL-001",
+    name: "Lechon Budget Meal",
+    price: 99,
+    category: "Meals",
+    productType: "Finished good",
+    status: "Available",
+    image: null,
+    stock: 24,
+    unit: "piece",
+    reorderLevel: 5,
+    expiryDate: null,
+  },
+  {
+    sku: "SNK-001",
+    name: "Cheese Burger",
+    price: 30,
+    category: "Snacks & Sides",
+    productType: "Finished good",
+    status: "Available",
+    image: null,
+    stock: 18,
+    unit: "piece",
+    reorderLevel: 5,
+    expiryDate: null,
+  },
+  {
+    sku: "MEL-002",
+    name: "Lechon Paksiw",
+    price: 149,
+    category: "Meals",
+    productType: "Finished good",
+    status: "Available",
+    image: null,
+    stock: 3,
+    unit: "piece",
+    reorderLevel: 5,
+    expiryDate: null,
+  },
+  {
+    sku: "SNK-002",
+    name: "Fries Platter",
+    price: 249,
+    category: "Snacks & Sides",
+    productType: "Finished good",
+    status: "Available",
+    image: null,
+    stock: 12,
+    unit: "tray",
+    reorderLevel: 4,
+    expiryDate: null,
+  },
+  {
+    sku: "MEL-003",
+    name: "Lechon Meal Unli Rice",
+    price: 129,
+    category: "Meals",
+    productType: "Finished good",
+    status: "Available",
+    image: null,
+    stock: 20,
+    unit: "piece",
+    reorderLevel: 5,
+    expiryDate: null,
+  },
+  {
+    sku: "SNK-003",
+    name: "Crazy Loaded Nachos",
+    price: 179,
+    category: "Snacks & Sides",
+    productType: "Finished good",
+    status: "Available",
+    image: null,
+    stock: 15,
+    unit: "tray",
+    reorderLevel: 5,
+    expiryDate: null,
+  },
+  {
+    sku: "DSR-001",
+    name: "Fruit Salad",
+    price: 79,
+    category: "Desserts and Drinks",
+    productType: "Finished good",
+    status: "Available",
+    image: null,
+    stock: 10,
+    unit: "piece",
+    reorderLevel: 4,
+    expiryDate: "2026-10-29",
+  },
+  {
+    sku: "MEL-004",
+    name: "Crew Meal",
+    price: 200,
+    category: "Meals",
+    productType: "Finished good",
+    status: "Available",
+    image: null,
+    stock: 9,
+    unit: "piece",
+    reorderLevel: 3,
+    expiryDate: null,
+  },
+  {
+    sku: "WLC-001",
+    name: "Whole Lechon Baboy (Medium)",
+    price: 6500,
+    category: "Whole Lechon",
+    productType: "Finished good",
+    status: "Available",
+    image: null,
+    stock: 2,
+    unit: "piece",
+    reorderLevel: 1,
+    expiryDate: null,
+    size: "Medium",
+    kilos: 20,
+    servingPax: 30,
+  },
 
-  { sku: "SNK-004", name: "Cheese Sauce", price: 50, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 30, unit: "piece", reorderLevel: 10, expiryDate: "2026-11-17", isAddon: true },
-  { sku: "SNK-006", name: "Lechon Bites", price: 120, category: "Snacks & Sides", productType: "Finished good", status: "Available", image: null, stock: 25, unit: "piece", reorderLevel: 8, expiryDate: "2026-11-25", isAddon: true },
+  {
+    sku: "SNK-004",
+    name: "Cheese Sauce",
+    price: 50,
+    category: "Snacks & Sides",
+    productType: "Finished good",
+    status: "Available",
+    image: null,
+    stock: 30,
+    unit: "piece",
+    reorderLevel: 10,
+    expiryDate: "2026-11-17",
+    isAddon: true,
+  },
+  {
+    sku: "SNK-006",
+    name: "Lechon Bites",
+    price: 120,
+    category: "Snacks & Sides",
+    productType: "Finished good",
+    status: "Available",
+    image: null,
+    stock: 25,
+    unit: "piece",
+    reorderLevel: 8,
+    expiryDate: "2026-11-25",
+    isAddon: true,
+  },
 
-  { sku: "RAW-001", name: "Rice", price: 0, category: "Raw Materials", productType: "Raw material", status: "Available", image: null, stock: 8, unit: "kg", reorderLevel: 10, expiryDate: null },
-  { sku: "DRK-001", name: "Refreshments", price: 35, category: "Desserts and Drinks", productType: "Finished good", status: "Unavailable", image: null, stock: 0, unit: "piece", reorderLevel: 10, expiryDate: null, isAddon: true },
-  { sku: "SNK-005", name: "Onion Rings", price: 129, category: "Snacks & Sides", productType: "Finished good", status: "Archived", image: null, stock: 0, unit: "piece", reorderLevel: 5, expiryDate: null },
+  {
+    sku: "RAW-001",
+    name: "Rice",
+    price: 0,
+    category: "Raw Materials",
+    productType: "Raw material",
+    status: "Available",
+    image: null,
+    stock: 8,
+    unit: "kg",
+    reorderLevel: 10,
+    expiryDate: null,
+  },
+  {
+    sku: "DRK-001",
+    name: "Refreshments",
+    price: 35,
+    category: "Desserts and Drinks",
+    productType: "Finished good",
+    status: "Unavailable",
+    image: null,
+    stock: 0,
+    unit: "piece",
+    reorderLevel: 10,
+    expiryDate: null,
+    isAddon: true,
+  },
+  {
+    sku: "SNK-005",
+    name: "Onion Rings",
+    price: 129,
+    category: "Snacks & Sides",
+    productType: "Finished good",
+    status: "Archived",
+    image: null,
+    stock: 0,
+    unit: "piece",
+    reorderLevel: 5,
+    expiryDate: null,
+  },
 ];
 
 export async function getProducts() {
@@ -164,7 +353,9 @@ export async function getProducts() {
 
 // ---------- Add Product ----------
 export async function addProduct(productData) {
-  const sku = String(productData.sku || "").trim().toUpperCase();
+  const sku = String(productData.sku || "")
+    .trim()
+    .toUpperCase();
   const name = String(productData.name || "").trim();
   const category = String(productData.category || "").trim();
   const productType = String(productData.productType || "").trim();
@@ -247,7 +438,7 @@ export async function addProduct(productData) {
 // ---------- Edit Product ----------
 export async function updateProduct(sku, updates) {
   const product = PRODUCTS.find(
-    (item) => item.sku === String(sku).trim().toUpperCase()
+    (item) => item.sku === String(sku).trim().toUpperCase(),
   );
 
   if (!product) throw new Error("Product not found.");
@@ -353,7 +544,7 @@ export async function updateProduct(sku, updates) {
 // ---------- Archive Product ----------
 export async function archiveProduct(sku) {
   const product = PRODUCTS.find(
-    (item) => item.sku === String(sku).trim().toUpperCase()
+    (item) => item.sku === String(sku).trim().toUpperCase(),
   );
 
   if (!product) throw new Error("Product not found.");
@@ -390,7 +581,7 @@ export async function getDiscountTypes() {
 
 export async function updateDiscountType(name, updates) {
   const discount = DISCOUNT_TYPES.find(
-    (item) => item.name === String(name).trim()
+    (item) => item.name === String(name).trim(),
   );
 
   if (!discount) {
@@ -417,9 +608,7 @@ export async function updateDiscountType(name, updates) {
       value < 0 ||
       value > 100
     ) {
-      throw new Error(
-        "Discount percentage must be between 0 and 100."
-      );
+      throw new Error("Discount percentage must be between 0 and 100.");
     }
 
     discount.value = value;
@@ -432,7 +621,6 @@ export async function updateDiscountType(name, updates) {
 
   return { ...discount };
 }
-
 
 // ---------- Transactions and Stock Movements ----------
 const TRANSACTIONS = [];
@@ -473,7 +661,7 @@ export async function saveTransaction(order) {
 
     if (quantity > Number(product.stock)) {
       throw new Error(
-        `Insufficient stock for ${product.name}. Available: ${product.stock}.`
+        `Insufficient stock for ${product.name}. Available: ${product.stock}.`,
       );
     }
   }
@@ -513,24 +701,24 @@ export async function saveTransaction(order) {
       order.paymentMethod || order.payment || order.paymentType || "—",
     amountReceived: Number(
       order.amountReceived ??
-      order.cashReceived ??
-      order.amountPaid ??
-      order.received ??
-      0
+        order.cashReceived ??
+        order.amountPaid ??
+        order.received ??
+        0,
     ),
     change: Number(
       order.change ??
-      order.changeAmount ??
-      Math.max(
-        0,
-        Number(
-          order.amountReceived ??
-          order.cashReceived ??
-          order.amountPaid ??
-          order.received ??
-          0
-        ) - Number(order.total || 0)
-      )
+        order.changeAmount ??
+        Math.max(
+          0,
+          Number(
+            order.amountReceived ??
+              order.cashReceived ??
+              order.amountPaid ??
+              order.received ??
+              0,
+          ) - Number(order.total || 0),
+        ),
     ),
   };
 
@@ -562,14 +750,12 @@ export async function saveTransaction(order) {
 
 // ---------- Get Transactions ----------
 export async function getTransactions(user) {
-  return TRANSACTIONS
-    .filter((t) => user.role === "Admin" || t.staff === user.name)
-    .map((t) => ({
-      ...t,
-      items: Array.isArray(t.items)
-        ? t.items.map((item) => ({ ...item }))
-        : [],
-    }));
+  return TRANSACTIONS.filter(
+    (t) => user.role === "Admin" || t.staff === user.name,
+  ).map((t) => ({
+    ...t,
+    items: Array.isArray(t.items) ? t.items.map((item) => ({ ...item })) : [],
+  }));
 }
 
 // ---------- Void / Refund Requests ----------
@@ -582,7 +768,7 @@ export async function requestTransactionAction({
   const transaction = TRANSACTIONS.find(
     (t) =>
       String(t.transactionId) === String(transactionId) ||
-      String(t.orderNumber) === String(transactionId)
+      String(t.orderNumber) === String(transactionId),
   );
 
   if (!transaction) {
@@ -591,7 +777,7 @@ export async function requestTransactionAction({
 
   if (String(transaction.status).toLowerCase() !== "completed") {
     throw new Error(
-      "Only completed transactions can be requested for void or refund."
+      "Only completed transactions can be requested for void or refund.",
     );
   }
 
@@ -612,10 +798,45 @@ export async function requestTransactionAction({
   transaction.requestType = requestType;
   transaction.requestReason = cleanReason;
   transaction.requestStatus = "Pending";
-  transaction.requestedBy = String(
-    staff || transaction.staff || "Cashier"
-  );
+  transaction.requestedBy = String(staff || transaction.staff || "Cashier");
   transaction.requestedAt = new Date().toISOString();
+
+  return {
+    ...transaction,
+    items: transaction.items.map((item) => ({ ...item })),
+  };
+}
+
+// ---------- Approval Requests (Admin) ----------
+// Pending void and refund requests, oldest first.
+export async function getPendingRequests() {
+  return TRANSACTIONS.filter((t) => t.requestStatus === "Pending")
+    .sort((a, b) => new Date(a.requestedAt) - new Date(b.requestedAt))
+    .map((t) => ({
+      ...t,
+      items: Array.isArray(t.items) ? t.items.map((item) => ({ ...item })) : [],
+    }));
+}
+
+// Approve a pending void or refund request (FR-43, FR-44).
+// Only the transaction record changes. Stock is not touched.
+export async function approveTransactionRequest(transactionId, admin) {
+  const transaction = TRANSACTIONS.find(
+    (t) => String(t.transactionId) === String(transactionId),
+  );
+
+  if (!transaction) throw new Error("Transaction not found.");
+
+  if (transaction.requestStatus !== "Pending") {
+    throw new Error("This request is no longer pending.");
+  }
+
+  transaction.status =
+    transaction.requestType === "Void" ? "Voided" : "Refunded";
+  transaction.requestStatus = "Approved";
+  transaction.voidRefundReason = transaction.requestReason;
+  transaction.approvedBy = String(admin || "Admin");
+  transaction.approvedAt = new Date().toISOString();
 
   return {
     ...transaction,
@@ -680,7 +901,7 @@ export function saveStockMovement({
   } else if (type === "out") {
     if (amount > previousStock) {
       throw new Error(
-        `Insufficient stock. Current stock is ${previousStock} ${product.unit || "unit(s)"}.`
+        `Insufficient stock. Current stock is ${previousStock} ${product.unit || "unit(s)"}.`,
       );
     }
 
@@ -756,8 +977,7 @@ let nextShiftId = 7;
 
 // ---------- Get Shifts ----------
 export async function getShifts(user) {
-  return SHIFTS
-    .filter((s) => user.role === "Admin" || s.staff === user.name)
+  return SHIFTS.filter((s) => user.role === "Admin" || s.staff === user.name)
     .sort((a, b) => b.shiftId - a.shiftId)
     .map((s) => ({ ...s }));
 }
@@ -797,25 +1017,25 @@ export async function openShift(user, openingCash) {
 // ---------- Shift Summary ----------
 export async function getShiftSummary(user) {
   const shift = SHIFTS.find(
-    (s) => s.staff === user.name && s.status === "Open"
+    (s) => s.staff === user.name && s.status === "Open",
   );
 
   if (!shift) throw new Error("No shift is open.");
 
   const sales = (await getTransactions(user)).filter(
-    (t) => t.status === "Completed" && dayKey(t.dateTime) === shift.shiftDate
+    (t) => t.status === "Completed" && dayKey(t.dateTime) === shift.shiftDate,
   );
 
   const cash = sales.filter((t) => {
-    const method = String(
-      t.payment || t.paymentMethod || t.paymentType || ""
-    ).trim().toLowerCase();
+    const method = String(t.payment || t.paymentMethod || t.paymentType || "")
+      .trim()
+      .toLowerCase();
 
     return method === "cash" || method.includes("cash");
   });
 
   const cashSales = money(
-    cash.reduce((sum, t) => sum + Number(t.total || 0), 0)
+    cash.reduce((sum, t) => sum + Number(t.total || 0), 0),
   );
 
   return {
@@ -836,7 +1056,7 @@ export async function closeShift(user, actualCash) {
   }
 
   const shift = SHIFTS.find(
-    (s) => s.staff === user.name && s.status === "Open"
+    (s) => s.staff === user.name && s.status === "Open",
   );
 
   if (!shift) throw new Error("No shift is open.");

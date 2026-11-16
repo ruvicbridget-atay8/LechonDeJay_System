@@ -1,7 +1,7 @@
-
 // transactions.js: transaction list shared by Cashiers and Admins.
 
 import * as api from "./api.js";
+import { renderApprovals } from "./approvals.js";
 import {
   renderTable,
   statusChip,
@@ -26,8 +26,13 @@ const formatDate = (dateTime) => {
   });
 };
 
-const getPayment = (t) =>
-  t.paymentMethod || t.payment || t.paymentType || "—";
+const getPayment = (t) => t.paymentMethod || t.payment || t.paymentType || "—";
+
+// While a void or refund request waits for the Admin, the list shows "Pending".
+const getStatus = (t) =>
+  String(t.requestStatus).toLowerCase() === "pending"
+    ? "Pending"
+    : t.status || "Completed";
 
 const getReceived = (t) =>
   Number(t.amountReceived ?? t.cashReceived ?? t.amountPaid ?? t.received ?? 0);
@@ -35,8 +40,8 @@ const getReceived = (t) =>
 const getChange = (t) =>
   Number(
     t.change ??
-    t.changeAmount ??
-    Math.max(0, getReceived(t) - Number(t.total || 0))
+      t.changeAmount ??
+      Math.max(0, getReceived(t) - Number(t.total || 0)),
   );
 
 const getItemPrice = (item) =>
@@ -45,9 +50,9 @@ const getItemPrice = (item) =>
 const getItemTotal = (item) =>
   Number(
     item.lineTotal ??
-    item.subtotal ??
-    item.total ??
-    getItemPrice(item) * Number(item.qty || 0)
+      item.subtotal ??
+      item.total ??
+      getItemPrice(item) * Number(item.qty || 0),
   );
 
 function showTransactionDetails(transaction, user, container) {
@@ -58,12 +63,12 @@ function showTransactionDetails(transaction, user, container) {
   const requestStatus = String(transaction.requestStatus || "").toLowerCase();
 
   const reason =
-    transaction.voidRefundReason ||
-    transaction.requestReason ||
-    "";
+    transaction.voidRefundReason || transaction.requestReason || "";
 
   const itemsHTML = items.length
-    ? items.map((item) => `
+    ? items
+        .map(
+          (item) => `
         <tr>
           <td>
             ${escapeHTML(item.name || "Unnamed item")}
@@ -73,25 +78,16 @@ function showTransactionDetails(transaction, user, container) {
           <td>${formatCurrency(getItemPrice(item))}</td>
           <td>${formatCurrency(getItemTotal(item))}</td>
         </tr>
-      `).join("")
+      `,
+        )
+        .join("")
     : `<tr><td colspan="4">No item details available.</td></tr>`;
 
   const statusLabel = reversed
-    ? status === "voided" ? "Voided" : "Refunded"
+    ? status === "voided"
+      ? "Voided"
+      : "Refunded"
     : "Completed Order";
-
-  // Status is now displayed immediately below the modal title.
-  const statusHTML = `
-    <div class="transaction-status-section transaction-status-top">
-      <span class="${
-        reversed
-          ? "transaction-status-reversed"
-          : "transaction-status-completed"
-      }">
-        ${escapeHTML(statusLabel)}
-      </span>
-    </div>
-  `;
 
   const requestContent = reversed
     ? `
@@ -108,7 +104,7 @@ function showTransactionDetails(transaction, user, container) {
       </section>
     `
     : requestStatus === "pending"
-    ? `
+      ? `
       <section class="transaction-request-record">
         <h3>Void / Refund Request</h3>
         <p><strong>Request Type:</strong> ${escapeHTML(transaction.requestType || "—")}</p>
@@ -119,7 +115,7 @@ function showTransactionDetails(transaction, user, container) {
         <p class="transaction-pending-message">Request Pending Approval</p>
       </section>
     `
-    : `
+      : `
       <form id="void-refund-form" class="transaction-request-form">
         <h3>Request Void / Refund</h3>
         <p class="muted">
@@ -156,7 +152,11 @@ function showTransactionDetails(transaction, user, container) {
     `;
 
   const content = `
-    ${statusHTML}
+    <div class="transaction-status-section transaction-status-top">
+      <span class="${reversed ? "transaction-status-reversed" : "transaction-status-completed"}">
+        ${escapeHTML(statusLabel)}
+      </span>
+    </div>
 
     <div class="transaction-receipt">
       <div class="transaction-receipt-header">
@@ -223,7 +223,8 @@ function showTransactionDetails(transaction, user, container) {
     errorElement.hidden = true;
 
     if (!requestType || !reasonText) {
-      errorElement.textContent = "Please select a request type and provide a reason.";
+      errorElement.textContent =
+        "Please select a request type and provide a reason.";
       errorElement.hidden = false;
       return;
     }
@@ -244,7 +245,8 @@ function showTransactionDetails(transaction, user, container) {
       if (modal?.close) modal.close();
       await renderTransactions(container, user);
     } catch (error) {
-      errorElement.textContent = error.message || "Unable to submit the request.";
+      errorElement.textContent =
+        error.message || "Unable to submit the request.";
       errorElement.hidden = false;
       submitButton.disabled = false;
       submitButton.textContent = "Request Void / Refund";
@@ -294,9 +296,7 @@ export async function renderTransactions(container, user) {
           label: "Items",
           render: (t) =>
             escapeHTML(
-              t.itemName ||
-              t.items?.map((item) => item.name).join(", ") ||
-              "—"
+              t.itemName || t.items?.map((item) => item.name).join(", ") || "—",
             ),
         },
         {
@@ -312,12 +312,7 @@ export async function renderTransactions(container, user) {
         {
           key: "status",
           label: "Status",
-          render: (t) => statusChip(t.status || "Completed"),
-        },
-        {
-          key: "requestStatus",
-          label: "Request",
-          render: (t) => t.requestStatus ? statusChip(t.requestStatus) : "—",
+          render: (t) => statusChip(getStatus(t)),
         },
       ],
 
@@ -328,32 +323,29 @@ export async function renderTransactions(container, user) {
         "orderNumber",
         "staff",
         "itemName",
-        "paymentMethod",
-        "status",
-        "requestType",
-        "requestStatus",
+        "customerName",
+        "customerContact",
       ],
-
       filters: [
         {
           label: "Completed",
           value: "completed",
-          predicate: (t) => String(t.status).toLowerCase() === "completed",
+          predicate: (t) => getStatus(t).toLowerCase() === "completed",
+        },
+        {
+          label: "Pending",
+          value: "pending",
+          predicate: (t) => getStatus(t).toLowerCase() === "pending",
         },
         {
           label: "Voided",
           value: "voided",
-          predicate: (t) => String(t.status).toLowerCase() === "voided",
+          predicate: (t) => getStatus(t).toLowerCase() === "voided",
         },
         {
           label: "Refunded",
           value: "refunded",
-          predicate: (t) => String(t.status).toLowerCase() === "refunded",
-        },
-        {
-          label: "Pending Requests",
-          value: "pending",
-          predicate: (t) => String(t.requestStatus).toLowerCase() === "pending",
+          predicate: (t) => getStatus(t).toLowerCase() === "refunded",
         },
       ],
 
@@ -364,6 +356,19 @@ export async function renderTransactions(container, user) {
         showTransactionDetails(transaction, user, container);
       },
     });
+
+    if (user.role === "Admin") {
+      container.insertAdjacentHTML(
+        "beforeend",
+        `<h2 class="page-title" style="margin-top:2rem">Approval Requests</h2>
+         <div id="approvals-table"></div>`,
+      );
+      await renderApprovals(
+        container.querySelector("#approvals-table"),
+        user,
+        () => renderTransactions(container, user),
+      );
+    }
   } catch (error) {
     console.error("Transactions loading error:", error);
 
