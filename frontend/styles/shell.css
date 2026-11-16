@@ -181,8 +181,7 @@
     display: none;
   }
 
-  /* The top bar button is only needed when the sidebar is hidden.
-     While the sidebar shows, it has its own hide button. */
+  /* The top bar button is only needed when the sidebar is hidden.*/
   .shell:not(.is-collapsed) #menu-toggle {
     display: none;
   }
