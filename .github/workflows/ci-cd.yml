@@ -1,0 +1,33 @@
+name: Lechon De Jay CI
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  frontend-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify Frontend Structure
+        run: |
+          test -f frontend/index.html
+
+      - name: Validate JavaScript Syntax
+        run: |
+          find frontend -name "*.js" -exec node --check {} \;
