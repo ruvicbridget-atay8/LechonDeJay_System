@@ -2,8 +2,116 @@
 // accounts.js: Admin account management page.
 
 import * as api from "./api.js";
-import { escapeHTML } from "./components.js";
+import { escapeHTML, openModal } from "./components.js";
 
+// ---------- CUSTOM ACCOUNT NOTICE ----------
+function showAccountNotice(title, message, type = "success") {
+  const isError = type === "error";
+
+  const modal = openModal({
+    title,
+    size: "small",
+    content: `
+      <div style="text-align:center; padding:0.5rem 0;">
+        <div style="
+          width:48px;
+          height:48px;
+          border-radius:50%;
+          margin:0 auto 12px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          background:${isError ? "#fde9e6" : "#e5f7ed"};
+          color:${isError ? "#b42318" : "#16834b"};
+          font-size:22px;
+        ">
+          <i class="bi ${isError ? "bi-exclamation-circle" : "bi-check-circle"}"></i>
+        </div>
+
+        <p style="color:#475467; margin:0;">
+          ${escapeHTML(message)}
+        </p>
+
+        <div style="display:flex; justify-content:center; margin-top:20px;">
+          <button type="button" class="btn btn--primary" id="account-notice-ok">
+            OK
+          </button>
+        </div>
+      </div>
+    `,
+  });
+
+  modal.element
+    .querySelector("#account-notice-ok")
+    .addEventListener("click", () => modal.close());
+}
+
+// ---------- CUSTOM ACCOUNT CONFIRMATION ----------
+function showAccountConfirmation(title, message, confirmLabel, onConfirm) {
+  const modal = openModal({
+    title,
+    size: "small",
+    content: `
+      <div style="padding:0.5rem 0;">
+        <p style="color:#475467; margin:0 0 20px;">
+          ${escapeHTML(message)}
+        </p>
+
+        <p
+          id="account-confirm-error"
+          role="alert"
+          style="color:#b42318; font-size:13px; margin-bottom:12px;"
+          hidden
+        ></p>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap;">
+          <button type="button" class="btn btn--soft" id="account-confirm-cancel">
+            Cancel
+          </button>
+
+          <button type="button" class="btn btn--primary" id="account-confirm-action">
+            ${escapeHTML(confirmLabel)}
+          </button>
+        </div>
+      </div>
+    `,
+  });
+
+  const confirmButton = modal.element.querySelector(
+    "#account-confirm-action"
+  );
+
+  const cancelButton = modal.element.querySelector(
+    "#account-confirm-cancel"
+  );
+
+  const errorMessage = modal.element.querySelector(
+    "#account-confirm-error"
+  );
+
+  cancelButton.addEventListener("click", () => modal.close());
+
+  confirmButton.addEventListener("click", async () => {
+    try {
+      confirmButton.disabled = true;
+      confirmButton.textContent = "Please wait...";
+
+      await onConfirm();
+
+      modal.close();
+    } catch (error) {
+      errorMessage.textContent =
+        error.message || "Unable to update account status.";
+
+      errorMessage.hidden = false;
+
+      confirmButton.disabled = false;
+      confirmButton.textContent = confirmLabel;
+    }
+  });
+}
+
+// ---------- RENDER ACCOUNTS ----------
 export function renderAccounts(container, currentUser) {
   container.innerHTML = `
     <div class="accounts-page">
@@ -51,12 +159,14 @@ export function renderAccounts(container, currentUser) {
   const tableBody = container.querySelector("#accounts-table-body");
   const searchInput = container.querySelector("#account-search");
 
+  // ---------- LOAD ACCOUNTS ----------
   async function loadAccounts() {
     try {
       const users = await api.getUsers();
       displayAccounts(users, searchInput.value);
     } catch (error) {
       console.error("Unable to load accounts:", error);
+
       tableBody.innerHTML = `
         <tr>
           <td colspan="5" style="text-align:center;padding:25px;">
@@ -67,6 +177,7 @@ export function renderAccounts(container, currentUser) {
     }
   }
 
+  // ---------- DISPLAY ACCOUNTS ----------
   function displayAccounts(users, searchTerm = "") {
     const term = searchTerm.toLowerCase().trim();
 
@@ -130,58 +241,114 @@ export function renderAccounts(container, currentUser) {
     }).join("");
   }
 
+  // ---------- SEARCH ----------
   searchInput.addEventListener("input", loadAccounts);
 
+  // ---------- ADD ACCOUNT ----------
   container.querySelector("#add-account-btn").addEventListener("click", () => {
     showAccountForm();
   });
 
+  // ---------- TABLE ACTIONS ----------
   tableBody.addEventListener("click", async (event) => {
-    const editButton = event.target.closest(".edit-account-btn");
-    const toggleButton = event.target.closest(".toggle-account-btn");
+    const target = event.target instanceof Element
+      ? event.target
+      : event.target.parentElement;
 
+    if (!target) return;
+
+    const editButton = target.closest(".edit-account-btn");
+    const toggleButton = target.closest(".toggle-account-btn");
+
+    // EDIT ACCOUNT
     if (editButton) {
-      const users = await api.getUsers();
+      try {
+        const users = await api.getUsers();
 
-      const user = users.find(
-        (item) => String(item.id) === editButton.dataset.id
-      );
+        const user = users.find(
+          (item) => String(item.id) === editButton.dataset.id
+        );
 
-      if (user) showAccountForm(user);
+        if (user) {
+          showAccountForm(user);
+        } else {
+          showAccountNotice(
+            "Account Not Found",
+            "The selected account could not be found.",
+            "error"
+          );
+        }
+      } catch (error) {
+        showAccountNotice(
+          "Unable to Open Account",
+          error.message || "Unable to retrieve account information.",
+          "error"
+        );
+      }
+
+      return;
     }
 
+    // ACTIVATE / DEACTIVATE ACCOUNT
     if (toggleButton) {
-      const users = await api.getUsers();
-
-      const user = users.find(
-        (item) => String(item.id) === toggleButton.dataset.id
-      );
-
-      if (!user) return;
-
-      if (
-        currentUser &&
-        String(currentUser.id) === String(user.id)
-      ) {
-        alert("You cannot deactivate your own account.");
-        return;
-      }
-
-      const action = user.active ? "deactivate" : "activate";
-
-      if (!confirm(`Are you sure you want to ${action} ${user.name}'s account?`)) {
-        return;
-      }
-
       try {
-        await api.updateUserStatus(user.id, !user.active);
-        await loadAccounts();
+        const users = await api.getUsers();
+
+        const user = users.find(
+          (item) => String(item.id) === toggleButton.dataset.id
+        );
+
+        if (!user) {
+          showAccountNotice(
+            "Account Not Found",
+            "The selected account could not be found.",
+            "error"
+          );
+          return;
+        }
+
+        // Prevent changing the current user's own account.
+        if (
+          currentUser &&
+          String(currentUser.id) === String(user.id)
+        ) {
+          showAccountNotice(
+            "Action Not Allowed",
+            "You cannot deactivate your own account.",
+            "error"
+          );
+          return;
+        }
+
+        const action = user.active ? "deactivate" : "activate";
+        const newStatus = !user.active;
+
+        showAccountConfirmation(
+          `${user.active ? "Deactivate" : "Activate"} Account`,
+          `Are you sure you want to ${action} ${user.name}'s account?`,
+          user.active ? "Deactivate" : "Activate",
+          async () => {
+            await api.updateUserStatus(user.id, newStatus);
+
+            await loadAccounts();
+
+            showAccountNotice(
+              "Account Updated",
+              `${user.name}'s account has been ${newStatus ? "activated" : "deactivated"} successfully.`
+            );
+          }
+        );
       } catch (error) {
-        alert(error.message || "Unable to update account status.");
+        showAccountNotice(
+          "Unable to Update Account",
+          error.message || "Unable to retrieve account information.",
+          "error"
+        );
       }
     }
   });
 
+  // ---------- ACCOUNT FORM ----------
   function showAccountForm(user = null) {
     const editing = Boolean(user);
 
@@ -219,6 +386,21 @@ export function renderAccounts(container, currentUser) {
 
         <form id="account-form">
           <div class="shared-modal-body">
+
+            <p
+              id="account-form-error"
+              role="alert"
+              style="
+                display:none;
+                color:#b42318;
+                background:#fde9e6;
+                border:1px solid #f0b8b3;
+                border-radius:8px;
+                padding:10px 12px;
+                font-size:13px;
+                margin-bottom:15px;
+              "
+            ></p>
 
             <div class="account-form-section">
               <h3>Personal Information</h3>
@@ -301,7 +483,11 @@ export function renderAccounts(container, currentUser) {
               Cancel
             </button>
 
-            <button type="submit" class="btn btn--primary">
+            <button
+              type="submit"
+              class="btn btn--primary"
+              id="save-account-btn"
+            >
               <i class="bi bi-check-lg"></i>
               ${editing ? "Save Changes" : "Create Account"}
             </button>
@@ -314,6 +500,10 @@ export function renderAccounts(container, currentUser) {
 
     const closeModal = () => modal.remove();
 
+    const form = modal.querySelector("#account-form");
+    const errorMessage = modal.querySelector("#account-form-error");
+    const saveButton = modal.querySelector("#save-account-btn");
+
     modal.querySelector("#close-account-form")
       .addEventListener("click", closeModal);
 
@@ -324,38 +514,59 @@ export function renderAccounts(container, currentUser) {
       if (event.target === modal) closeModal();
     });
 
-    modal.querySelector("#account-form")
-      .addEventListener("submit", async (event) => {
-        event.preventDefault();
+    // ---------- SAVE ACCOUNT ----------
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
 
-        const formData = new FormData(event.target);
+      errorMessage.style.display = "none";
+      errorMessage.textContent = "";
 
-        const data = {
-          name: formData.get("name").trim(),
-          username: formData.get("username").trim(),
-          password: formData.get("password"),
-          role: formData.get("role"),
-        };
+      if (!form.reportValidity()) return;
 
-        try {
-          if (editing) {
-            await api.updateUser(user.id, data);
-          } else {
-            await api.addUser(data);
-          }
+      const formData = new FormData(form);
 
-          closeModal();
-          await loadAccounts();
+      const data = {
+        name: String(formData.get("name") || "").trim(),
+        username: String(formData.get("username") || "").trim(),
+        password: formData.get("password"),
+        role: formData.get("role"),
+      };
 
-          alert(
-            editing
-              ? "Account updated successfully."
-              : "Account created successfully."
-          );
-        } catch (error) {
-          alert(error.message || "Unable to save account.");
+      try {
+        saveButton.disabled = true;
+        saveButton.textContent = "Saving...";
+
+        if (editing) {
+          await api.updateUser(user.id, data);
+        } else {
+          await api.addUser(data);
         }
-      });
+
+        closeModal();
+
+        await loadAccounts();
+
+        showAccountNotice(
+          editing ? "Account Updated" : "Account Created",
+          editing
+            ? "The account information has been updated successfully."
+            : "The new account has been created successfully."
+        );
+
+      } catch (error) {
+        // Keep the form open and preserve entered values.
+        errorMessage.textContent =
+          error.message || "Unable to save account.";
+
+        errorMessage.style.display = "block";
+
+        saveButton.disabled = false;
+        saveButton.innerHTML = `
+          <i class="bi bi-check-lg"></i>
+          ${editing ? "Save Changes" : "Create Account"}
+        `;
+      }
+    });
 
     modal.querySelector("#account-name").focus();
   }

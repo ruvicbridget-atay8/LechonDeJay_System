@@ -1,5 +1,6 @@
 
 // stock.js: Stock Movement page for Admin.
+
 import * as api from "./api.js";
 import {
   renderTable,
@@ -8,6 +9,7 @@ import {
   openModal,
 } from "./components.js";
 
+// ---------- DATE FORMAT ----------
 const formatDate = (dateTime) => {
   const date = new Date(dateTime);
 
@@ -19,6 +21,7 @@ const formatDate = (dateTime) => {
   });
 };
 
+// ---------- QUANTITY FORMAT ----------
 const formatQuantity = (quantity) => {
   const value = Number(quantity) || 0;
 
@@ -32,6 +35,67 @@ const formatQuantity = (quantity) => {
   return "0";
 };
 
+// ---------- CUSTOM STOCK NOTICE ----------
+function showStockNotice(title, message, type = "success", details = "") {
+  const isError = type === "error";
+
+  const modal = openModal({
+    title,
+    size: "small",
+
+    content: `
+      <div style="text-align:center; padding:0.5rem 0;">
+
+        <div style="
+          width:48px;
+          height:48px;
+          border-radius:50%;
+          margin:0 auto 12px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          background:${isError ? "#fde9e6" : "#e5f7ed"};
+          color:${isError ? "#b42318" : "#16834b"};
+          font-size:22px;
+        ">
+          <i class="bi ${isError ? "bi-exclamation-circle" : "bi-check-circle"}"></i>
+        </div>
+
+        <p style="color:#475467; margin:0;">
+          ${escapeHTML(message)}
+        </p>
+
+        ${details ? `
+          <div style="
+            text-align:left;
+            background:#f9fafb;
+            border:1px solid #eaecf0;
+            border-radius:8px;
+            padding:12px;
+            margin-top:15px;
+            font-size:13px;
+            line-height:1.8;
+          ">
+            ${details}
+          </div>
+        ` : ""}
+
+        <div style="display:flex; justify-content:center; margin-top:20px;">
+          <button type="button" class="btn btn--primary" id="stock-notice-ok">
+            OK
+          </button>
+        </div>
+
+      </div>
+    `,
+  });
+
+  modal.element
+    .querySelector("#stock-notice-ok")
+    .addEventListener("click", () => modal.close());
+}
+
+// ---------- RENDER STOCK MOVEMENT ----------
 export async function renderStock(container, user) {
   container.innerHTML = `
     <h1 class="page-title">Stock Movement</h1>
@@ -133,7 +197,11 @@ export async function renderStock(container, user) {
           );
 
           if (!activeProducts.length) {
-            window.alert("There are no active products available.");
+            showStockNotice(
+              "No Available Products",
+              "There are no active products available for stock movement.",
+              "error"
+            );
             return;
           }
 
@@ -276,6 +344,7 @@ export async function renderStock(container, user) {
 
               quantityInput.min = "0.001";
               quantityInput.placeholder = "Enter quantity to add";
+
             } else if (type === "out") {
               quantityLabel.textContent = "Quantity to Remove";
 
@@ -284,6 +353,7 @@ export async function renderStock(container, user) {
 
               quantityInput.min = "0.001";
               quantityInput.placeholder = "Enter quantity to remove";
+
             } else {
               quantityLabel.textContent = "New Total Stock";
 
@@ -330,7 +400,8 @@ export async function renderStock(container, user) {
               saveButton.disabled = true;
               saveButton.textContent = "Saving...";
 
-              const result = api.saveStockMovement({
+              // Wait for the stock movement result.
+              const result = await api.saveStockMovement({
                 sku: selectedSku,
                 movementType: formData.get("movementType"),
                 quantity: formData.get("quantity"),
@@ -346,11 +417,27 @@ export async function renderStock(container, user) {
 
               modal.close();
 
-              window.alert(
-                `Stock movement saved successfully!\n\n` +
-                `Product: ${selectedProduct?.name || result.sku}\n` +
-                `Previous stock: ${result.previousStock}\n` +
-                `New stock: ${result.newStock}`
+              // Show updated stock information.
+              showStockNotice(
+                "Stock Movement Saved",
+                "The stock movement was recorded successfully.",
+                "success",
+                `
+                  <div>
+                    <strong>Product:</strong>
+                    ${escapeHTML(selectedProduct?.name || result.sku)}
+                  </div>
+
+                  <div>
+                    <strong>Previous Stock:</strong>
+                    ${escapeHTML(result.previousStock)}
+                  </div>
+
+                  <div>
+                    <strong>New Stock:</strong>
+                    ${escapeHTML(result.newStock)}
+                  </div>
+                `
               );
 
             } catch (error) {
@@ -370,8 +457,10 @@ export async function renderStock(container, user) {
         } catch (error) {
           console.error("Unable to open stock movement form:", error);
 
-          window.alert(
-            error.message || "Unable to open the stock movement form."
+          showStockNotice(
+            "Unable to Open Stock Movement",
+            error.message || "Unable to open the stock movement form.",
+            "error"
           );
         }
       });
@@ -387,3 +476,4 @@ export async function renderStock(container, user) {
     `;
   }
 }
+

@@ -1,5 +1,6 @@
 
- // inventory.js: displays product inventory for Cashier and Admin.
+// inventory.js: displays product inventory for Cashier and Admin.
+
 import * as api from "./api.js";
 import {
   renderTable,
@@ -10,11 +11,62 @@ import {
 
 const FLAG_REASONS = ["delivery", "expired", "spoilage"];
 
+// ---------- CUSTOM NOTIFICATION ----------
+function showInventoryNotice(title, message, type = "success") {
+  const isError = type === "error";
+
+  const modal = openModal({
+    title,
+    size: "small",
+    content: `
+      <div style="padding:4px 0;">
+        <div style="
+          display:flex;
+          align-items:center;
+          gap:12px;
+          margin-bottom:16px;
+        ">
+          <div style="
+            width:42px;
+            height:42px;
+            flex-shrink:0;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            border-radius:50%;
+            background:${isError ? "#fff0f0" : "#e8f7ee"};
+            color:${isError ? "#b90914" : "#16834b"};
+            font-size:21px;
+          ">
+            ${isError ? "&#10006;" : "&#10003;"}
+          </div>
+
+          <div style="font-size:14px;line-height:1.6;">
+            ${escapeHTML(message)}
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;margin-top:20px;">
+          <button type="button" class="btn btn--primary" id="inventory-notice-ok">
+            OK
+          </button>
+        </div>
+      </div>
+    `,
+  });
+
+  modal.element
+    .querySelector("#inventory-notice-ok")
+    .addEventListener("click", () => modal.close());
+}
+
+// ---------- BUILD STOCK FLAGS ----------
 function buildFlags(movements) {
   const latest = {};
 
   for (const movement of movements) {
     const reason = String(movement.reason || "").toLowerCase();
+
     if (!FLAG_REASONS.includes(reason)) continue;
 
     const time = new Date(movement.dateTime).getTime();
@@ -34,6 +86,7 @@ function buildFlags(movements) {
   return flags;
 }
 
+// ---------- PRODUCT STATUS ----------
 function getProductStatus(product) {
   if (product.status === "Archived") return "Archived";
 
@@ -48,7 +101,7 @@ function getProductStatus(product) {
   return "Available";
 }
 
-// ---------- Product Form ----------
+// ---------- PRODUCT FORM ----------
 function productFormContent(product = null) {
   const editing = Boolean(product);
 
@@ -187,7 +240,7 @@ function productFormContent(product = null) {
   `;
 }
 
-// ---------- Add / Edit Product Modal ----------
+// ---------- ADD / EDIT PRODUCT MODAL ----------
 function renderProductModal(table, product = null) {
   const editing = Boolean(product);
 
@@ -260,11 +313,13 @@ function renderProductModal(table, product = null) {
 
       modal.close();
 
-      alert(
+      showInventoryNotice(
+        editing ? "Product Updated" : "Product Added",
         editing
           ? "Product successfully updated."
           : "Product successfully added to inventory."
       );
+
     } catch (error) {
       errorMessage.textContent =
         error.message || "Unable to save product. Please try again.";
@@ -276,7 +331,7 @@ function renderProductModal(table, product = null) {
   });
 }
 
-// ---------- Archive Confirmation ----------
+// ---------- ARCHIVE CONFIRMATION ----------
 function renderArchiveConfirmation(table, product) {
   const content = `
     <div style="padding-top:4px;">
@@ -353,7 +408,12 @@ function renderArchiveConfirmation(table, product) {
       table.setData(updatedProducts);
 
       modal.close();
-      alert("Product successfully archived.");
+
+      showInventoryNotice(
+        "Product Archived",
+        "Product successfully archived."
+      );
+
     } catch (error) {
       errorMessage.textContent =
         error.message || "Unable to archive product.";
@@ -365,7 +425,7 @@ function renderArchiveConfirmation(table, product) {
   });
 }
 
-// ---------- Inventory Page ----------
+// ---------- INVENTORY PAGE ----------
 export async function renderInventory(container, user) {
   container.innerHTML = `
     <h1 class="page-title">Inventory</h1>
@@ -379,7 +439,6 @@ export async function renderInventory(container, user) {
       api.getStockMovements(),
     ]);
 
-    // Keep existing stock flag calculation.
     const flags = buildFlags(movements);
 
     container.innerHTML = `
@@ -473,7 +532,7 @@ export async function renderInventory(container, user) {
       },
     ];
 
-    // ---------- Admin Action Buttons ----------
+    // ---------- ADMIN ACTION BUTTONS ----------
     if (user?.role === "Admin") {
       columns.push({
         key: "actions",
@@ -547,7 +606,7 @@ export async function renderInventory(container, user) {
       emptyMessage: "No inventory products found.",
     });
 
-    // ---------- Add Product ----------
+    // ---------- ADD PRODUCT ----------
     const addButton = container.querySelector("#add-product-button");
 
     if (addButton && user?.role === "Admin") {
@@ -556,7 +615,7 @@ export async function renderInventory(container, user) {
       });
     }
 
-    // ---------- Edit and Archive ----------
+    // ---------- EDIT AND ARCHIVE ----------
     tableContainer.addEventListener("click", async (event) => {
       const target = event.target;
 
@@ -582,12 +641,20 @@ export async function renderInventory(container, user) {
         );
 
         if (!product) {
-          alert("Product could not be found. Please refresh the inventory.");
+          showInventoryNotice(
+            "Product Not Found",
+            "Product could not be found. Please refresh the inventory.",
+            "error"
+          );
           return;
         }
 
         if (product.status === "Archived") {
-          alert("This product is already archived.");
+          showInventoryNotice(
+            "Product Already Archived",
+            "This product is already archived.",
+            "error"
+          );
           return;
         }
 
@@ -596,8 +663,14 @@ export async function renderInventory(container, user) {
         } else {
           renderArchiveConfirmation(table, product);
         }
+
       } catch (error) {
-        alert(error.message || "Unable to open product action.");
+        showInventoryNotice(
+          "Unable to Open Product",
+          error.message || "Unable to open product action.",
+          "error"
+        );
+
       } finally {
         clickedButton.disabled = false;
       }
