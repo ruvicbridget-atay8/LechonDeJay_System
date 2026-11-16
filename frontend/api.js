@@ -685,42 +685,37 @@ export async function saveTransaction(order) {
     };
   });
 
-  const record = {
-    ...order,
-    items: savedItems,
-    transactionId: id,
-    orderNumber: id,
-    dateTime: now,
-    status: "Completed",
-    requestType: "",
-    requestReason: "",
-    requestStatus: "None",
-    voidRefundReason: "",
-    itemName: savedItems.map((i) => `${i.qty}x ${i.name}`).join(", "),
-    paymentMethod:
-      order.paymentMethod || order.payment || order.paymentType || "—",
-    amountReceived: Number(
-      order.amountReceived ??
-        order.cashReceived ??
-        order.amountPaid ??
-        order.received ??
-        0,
-    ),
-    change: Number(
-      order.change ??
-        order.changeAmount ??
-        Math.max(
-          0,
-          Number(
-            order.amountReceived ??
-              order.cashReceived ??
-              order.amountPaid ??
-              order.received ??
-              0,
-          ) - Number(order.total || 0),
-        ),
-    ),
-  };
+ 
+const amountReceived = Number(
+  order.amountTendered ??
+    order.amountReceived ??
+    order.cashReceived ??
+    order.amountPaid ??
+    order.received ??
+    0,
+);
+
+const record = {
+  ...order,
+  items: savedItems,
+  transactionId: id,
+  orderNumber: id,
+  dateTime: now,
+  status: "Completed",
+  requestType: "",
+  requestReason: "",
+  requestStatus: "None",
+  voidRefundReason: "",
+  itemName: savedItems.map((i) => `${i.qty}x ${i.name}`).join(", "),
+  paymentMethod:
+    order.paymentMethod || order.payment || order.paymentType || "—",
+  amountReceived,
+  change: Number(
+    order.change ??
+      order.changeAmount ??
+      Math.max(0, amountReceived - Number(order.total || 0)),
+  ),
+};
 
   // Deduct stock and record stock movements.
   savedItems.forEach((line) => {
