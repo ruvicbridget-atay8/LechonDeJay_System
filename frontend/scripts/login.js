@@ -1,5 +1,6 @@
 // login.js: draws the Login screen into #app.
 import * as api from "./api.js";
+import { addPasswordToggle } from "./password-toggle.js";
 
 export function renderLogin(onSuccess) {
   document.title = "Sign in | Lechon De Jay";
@@ -12,7 +13,7 @@ export function renderLogin(onSuccess) {
       <main class="login-main">
         <form class="login-card" id="login-form" novalidate>
           <img class="login-logo" src="assets/logo.png" alt="Lechon De Jay logo" />
-          <h1>Welcome Back <span aria-hidden="true">👋</span></h1>
+          <h1>Welcome Back <span aria-hidden="true"></span></h1>
           <p class="login-sub">Sign in to start your shift.</p>
           <div class="alert" id="login-error" role="alert" hidden></div>
           <div class="field">
@@ -33,6 +34,7 @@ export function renderLogin(onSuccess) {
   const form = document.getElementById("login-form");
   const error = document.getElementById("login-error");
   form.username.focus();
+  addPasswordToggle(document.getElementById("password"));
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();

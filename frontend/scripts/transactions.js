@@ -30,10 +30,7 @@ const formatDate = (dateTime) => {
 
 const getPayment = (t) => t.paymentMethod || t.payment || t.paymentType || "—";
 
-const getStatus = (t) =>
-  String(t.requestStatus).toLowerCase() === "pending"
-    ? "Pending"
-    : t.status || "Completed";
+const getStatus = (t) => t.status || "Completed";
 
 const getReceived = (t) =>
   Number(
@@ -84,55 +81,55 @@ function showRequestSuccess(container, user) {
   const successModal = openModal({
     title: "Request Submitted",
     content: `
-      <div
-        class="transaction-request-success"
-        role="status"
-        style="
-          text-align: center;
-          padding: 8px 12px 12px;
-        "
-      >
         <div
-          class="transaction-request-success-icon"
+          class="transaction-request-success"
+          role="status"
           style="
-            font-size: 38px;
-            color: #16a34a;
-            margin-bottom: 8px;
+            text-align: center;
+            padding: 8px 12px 12px;
           "
         >
-          <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+          <div
+            class="transaction-request-success-icon"
+            style="
+              font-size: 38px;
+              color: #16a34a;
+              margin-bottom: 8px;
+            "
+          >
+            <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+          </div>
+
+          <h3 style="
+            font-size: 17px;
+            margin: 0 0 6px;
+          ">
+            Request Submitted Successfully!
+          </h3>
+
+          <p style="
+            font-size: 13px;
+            line-height: 1.5;
+            margin: 0 0 16px;
+            color: #667085;
+          ">
+            Your Void / Refund request is waiting for
+            Admin approval.
+          </p>
+
+          <button
+            type="button"
+            class="transaction-request-submit"
+            id="transaction-request-success-ok"
+            style="
+              min-width: 90px;
+              padding: 8px 20px;
+            "
+          >
+            OK
+          </button>
         </div>
-
-        <h3 style="
-          font-size: 17px;
-          margin: 0 0 6px;
-        ">
-          Request Submitted Successfully!
-        </h3>
-
-        <p style="
-          font-size: 13px;
-          line-height: 1.5;
-          margin: 0 0 16px;
-          color: #667085;
-        ">
-          Your Void / Refund request is waiting for
-          Admin approval.
-        </p>
-
-        <button
-          type="button"
-          class="transaction-request-submit"
-          id="transaction-request-success-ok"
-          style="
-            min-width: 90px;
-            padding: 8px 20px;
-          "
-        >
-          OK
-        </button>
-      </div>
-    `,
+      `,
     size: "small",
   });
 
@@ -161,26 +158,26 @@ function showTransactionDetails(transaction, user, container) {
     ? items
         .map(
           (item) => `
-            <tr>
-              <td>
-                ${escapeHTML(item.name || "Unnamed item")}
-                <small>${escapeHTML(item.sku || "")}</small>
-              </td>
+              <tr>
+                <td>
+                  ${escapeHTML(item.name || "Unnamed item")}
+                  <small>${escapeHTML(item.sku || "")}</small>
+                </td>
 
-              <td>${escapeHTML(item.qty ?? 0)}</td>
+                <td>${escapeHTML(item.qty ?? 0)}</td>
 
-              <td>${formatCurrency(getItemPrice(item))}</td>
+                <td>${formatCurrency(getItemPrice(item))}</td>
 
-              <td>${formatCurrency(getItemTotal(item))}</td>
-            </tr>
-          `,
+                <td>${formatCurrency(getItemTotal(item))}</td>
+              </tr>
+            `,
         )
         .join("")
     : `
-        <tr>
-          <td colspan="4">No item details available.</td>
-        </tr>
-      `;
+          <tr>
+            <td colspan="4">No item details available.</td>
+          </tr>
+        `;
 
   const statusLabel = reversed
     ? status === "voided"
@@ -190,107 +187,107 @@ function showTransactionDetails(transaction, user, container) {
 
   const requestContent = reversed
     ? `
-        <section class="transaction-request-record">
-          <h3>Reversal Record</h3>
-
-          <p>
-            <strong>Request Type:</strong>
-            ${escapeHTML(
-              transaction.requestType ||
-                (status === "voided" ? "Void" : "Refund"),
-            )}
-          </p>
-
-          <p><strong>Recorded Reason:</strong></p>
-
-          <div class="transaction-reason-display">
-            ${escapeHTML(reason || "No reason recorded.")}
-          </div>
-
-          <p class="muted">
-            This transaction is read-only.
-          </p>
-        </section>
-      `
-    : requestStatus === "pending"
-      ? `
           <section class="transaction-request-record">
-            <h3>Void / Refund Request</h3>
+            <h3>Reversal Record</h3>
 
             <p>
               <strong>Request Type:</strong>
-              ${escapeHTML(transaction.requestType || "—")}
+              ${escapeHTML(
+                transaction.requestType ||
+                  (status === "voided" ? "Void" : "Refund"),
+              )}
             </p>
 
-            <p><strong>Reason:</strong></p>
+            <p><strong>Recorded Reason:</strong></p>
 
             <div class="transaction-reason-display">
-              ${escapeHTML(transaction.requestReason || "—")}
+              ${escapeHTML(reason || "No reason recorded.")}
             </div>
 
-            <p class="transaction-pending-message">
-              Request Pending Approval
+            <p class="muted">
+              This transaction is read-only.
             </p>
           </section>
         `
+    : requestStatus === "pending"
+      ? `
+            <section class="transaction-request-record">
+              <h3>Void / Refund Request</h3>
+
+              <p>
+                <strong>Request Type:</strong>
+                ${escapeHTML(transaction.requestType || "—")}
+              </p>
+
+              <p><strong>Reason:</strong></p>
+
+              <div class="transaction-reason-display">
+                ${escapeHTML(transaction.requestReason || "—")}
+              </div>
+
+              <p class="transaction-pending-message">
+                Request Pending Approval
+              </p>
+            </section>
+          `
       : `
-          <form
-            id="void-refund-form"
-            class="transaction-request-form"
-          >
-            <h3>Request Void / Refund</h3>
-
-            <p class="muted">
-              Select a request type and explain why this
-              transaction needs to be reversed.
-            </p>
-
-            <div class="form-group">
-              <label for="transaction-request-type">
-                Request Type *
-              </label>
-
-              <select
-                id="transaction-request-type"
-                name="requestType"
-                required
-              >
-                <option value="">Select request type</option>
-                <option value="Void">Void</option>
-                <option value="Refund">Refund</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label for="transaction-request-reason">
-                Reason *
-              </label>
-
-              <textarea
-                id="transaction-request-reason"
-                name="reason"
-                rows="3"
-                maxlength="500"
-                placeholder="Explain the reason for this request..."
-                required
-              ></textarea>
-            </div>
-
-            <p
-              id="transaction-request-error"
-              class="transaction-request-error"
-              role="alert"
-              hidden
-            ></p>
-
-            <button
-              type="submit"
-              class="transaction-request-submit"
+            <form
+              id="void-refund-form"
+              class="transaction-request-form"
             >
-              Request Void / Refund
-            </button>
-          </form>
-        `;
+              <h3>Request Void / Refund</h3>
+
+              <p class="muted">
+                Select a request type and explain why this
+                transaction needs to be reversed.
+              </p>
+
+              <div class="form-group">
+                <label for="transaction-request-type">
+                  Request Type *
+                </label>
+
+                <select
+                  id="transaction-request-type"
+                  name="requestType"
+                  required
+                >
+                  <option value="">Select request type</option>
+                  <option value="Void">Void</option>
+                  <option value="Refund">Refund</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="transaction-request-reason">
+                  Reason *
+                </label>
+
+                <textarea
+                  id="transaction-request-reason"
+                  name="reason"
+                  rows="3"
+                  maxlength="500"
+                  placeholder="Explain the reason for this request..."
+                  required
+                ></textarea>
+              </div>
+
+              <p
+                id="transaction-request-error"
+                class="transaction-request-error"
+                role="alert"
+                hidden
+              ></p>
+
+              <button
+                type="submit"
+                class="transaction-request-submit"
+              >
+                Request Void / Refund
+              </button>
+            </form>
+          `;
 
   const customerName = String(transaction.customerName || "").trim();
 
@@ -299,152 +296,152 @@ function showTransactionDetails(transaction, user, container) {
   const discountAmount = getDiscountAmount(transaction);
 
   const adminActionsHTML = `
-    <div class="approval-actions">
-      <button type="button" class="btn btn--soft" id="edit-transaction-btn">Edit Transaction</button>
-      <button type="button" class="btn btn--primary" id="admin-void-btn">Void / Refund</button>
-    </div>
-
-    <form id="admin-void-form" class="transaction-request-form" hidden>
-      <h3>Void / Refund</h3>
-
-      <div class="form-group">
-        <label for="admin-void-type">Type *</label>
-        <select id="admin-void-type" name="requestType" required>
-          <option value="">Select Void or Refund</option>
-          <option value="Void">Void</option>
-          <option value="Refund">Refund</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="admin-void-reason">Reason *</label>
-        <textarea
-          id="admin-void-reason"
-          name="reason"
-          rows="3"
-          maxlength="500"
-          placeholder="Explain the reason..."
-          required
-        ></textarea>
-      </div>
-
-      <p id="admin-void-error" class="transaction-request-error" role="alert" hidden></p>
-
       <div class="approval-actions">
-        <button type="button" class="btn btn--soft" id="admin-void-cancel">Cancel</button>
-        <button type="submit" class="btn btn--primary" id="admin-void-submit">Apply</button>
+        <button type="button" class="btn btn--soft" id="edit-transaction-btn">Edit Transaction</button>
+        <button type="button" class="btn btn--primary" id="admin-void-btn">Void / Refund</button>
       </div>
-    </form>
-  `;
+
+      <form id="admin-void-form" class="transaction-request-form" hidden>
+        <h3>Void / Refund</h3>
+
+        <div class="form-group">
+          <label for="admin-void-type">Type *</label>
+          <select id="admin-void-type" name="requestType" required>
+            <option value="">Select Void or Refund</option>
+            <option value="Void">Void</option>
+            <option value="Refund">Refund</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="admin-void-reason">Reason *</label>
+          <textarea
+            id="admin-void-reason"
+            name="reason"
+            rows="3"
+            maxlength="500"
+            placeholder="Explain the reason..."
+            required
+          ></textarea>
+        </div>
+
+        <p id="admin-void-error" class="transaction-request-error" role="alert" hidden></p>
+
+        <div class="approval-actions">
+          <button type="button" class="btn btn--soft" id="admin-void-cancel">Cancel</button>
+          <button type="submit" class="btn btn--primary" id="admin-void-submit">Apply</button>
+        </div>
+      </form>
+    `;
 
   const content = `
-    <div class="transaction-status-section transaction-status-top">
-      <span class="${
-        reversed
-          ? "transaction-status-reversed"
-          : "transaction-status-completed"
-      }">
-        ${escapeHTML(statusLabel)}
-      </span>
-    </div>
-
-    <div class="transaction-receipt">
-      <div class="transaction-receipt-header">
-        <h2>Lechon De Jay</h2>
-        <p>Transaction Receipt</p>
+      <div class="transaction-status-section transaction-status-top">
+        <span class="${
+          reversed
+            ? "transaction-status-reversed"
+            : "transaction-status-completed"
+        }">
+          ${escapeHTML(statusLabel)}
+        </span>
       </div>
 
-      <div class="transaction-receipt-info">
-        <div>
-          <strong>Order No.</strong>
-          <span>${escapeHTML(transaction.orderNumber ?? "—")}</span>
+      <div class="transaction-receipt">
+        <div class="transaction-receipt-header">
+          <h2>Lechon De Jay</h2>
+          <p>Transaction Receipt</p>
         </div>
 
-        <div>
-          <strong>Transaction No.</strong>
-          <span>${escapeHTML(transaction.transactionId ?? "—")}</span>
+        <div class="transaction-receipt-info">
+          <div>
+            <strong>Order No.</strong>
+            <span>${escapeHTML(transaction.orderNumber ?? "—")}</span>
+          </div>
+
+          <div>
+            <strong>Transaction No.</strong>
+            <span>${escapeHTML(transaction.transactionId ?? "—")}</span>
+          </div>
+
+          <div>
+            <strong>Order Type</strong>
+            <span>${escapeHTML(transaction.orderType || "—")}</span>
+          </div>
+
+          <div>
+            <strong>Staff</strong>
+            <span>${escapeHTML(transaction.staff || "—")}</span>
+          </div>
+
+          <div>
+            <strong>Customer Name</strong>
+            <span>${escapeHTML(customerName || "—")}</span>
+          </div>
+
+          <div>
+            <strong>Customer Contact</strong>
+            <span>${escapeHTML(customerContact || "—")}</span>
+          </div>
+
+          <div>
+            <strong>Date & Time</strong>
+            <span>${escapeHTML(formatDate(transaction.dateTime))}</span>
+          </div>
+
+          <div>
+            <strong>Payment Method</strong>
+            <span>${escapeHTML(getPayment(transaction))}</span>
+          </div>
         </div>
 
-        <div>
-          <strong>Order Type</strong>
-          <span>${escapeHTML(transaction.orderType || "—")}</span>
+        <h3 class="transaction-items-heading">
+          Order Items
+        </h3>
+
+        <div class="table-responsive">
+          <table class="data-table transaction-items-table">
+            <thead>
+              <tr>
+                <th scope="col">Product</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Price</th>
+                <th scope="col">Amount</th>
+              </tr>
+            </thead>
+
+            <tbody>${itemsHTML}</tbody>
+          </table>
         </div>
 
-        <div>
-          <strong>Staff</strong>
-          <span>${escapeHTML(transaction.staff || "—")}</span>
+        <div class="transaction-receipt-totals">
+          <div>
+            <span>Subtotal</span>
+            <strong>${formatCurrency(transaction.subtotal)}</strong>
+          </div>
+
+          <div>
+            <span>${escapeHTML(getDiscountLabel(transaction))}</span>
+            <strong>${formatCurrency(discountAmount)}</strong>
+          </div>
+
+          <div class="transaction-total-due">
+            <span>Total Due</span>
+            <strong>${formatCurrency(transaction.total)}</strong>
+          </div>
+
+          <div>
+            <span>Amount Received</span>
+            <strong>${formatCurrency(getReceived(transaction))}</strong>
+          </div>
+
+          <div>
+            <span>Change</span>
+            <strong>${formatCurrency(getChange(transaction))}</strong>
+          </div>
         </div>
 
-        <div>
-          <strong>Customer Name</strong>
-          <span>${escapeHTML(customerName || "—")}</span>
-        </div>
-
-        <div>
-          <strong>Customer Contact</strong>
-          <span>${escapeHTML(customerContact || "—")}</span>
-        </div>
-
-        <div>
-          <strong>Date & Time</strong>
-          <span>${escapeHTML(formatDate(transaction.dateTime))}</span>
-        </div>
-
-        <div>
-          <strong>Payment Method</strong>
-          <span>${escapeHTML(getPayment(transaction))}</span>
-        </div>
+                    ${user.role === "Admin" && !reversed && requestStatus !== "pending" ? adminActionsHTML : requestContent}
       </div>
-
-      <h3 class="transaction-items-heading">
-        Order Items
-      </h3>
-
-      <div class="table-responsive">
-        <table class="data-table transaction-items-table">
-          <thead>
-            <tr>
-              <th scope="col">Product</th>
-              <th scope="col">Qty</th>
-              <th scope="col">Price</th>
-              <th scope="col">Amount</th>
-            </tr>
-          </thead>
-
-          <tbody>${itemsHTML}</tbody>
-        </table>
-      </div>
-
-      <div class="transaction-receipt-totals">
-        <div>
-          <span>Subtotal</span>
-          <strong>${formatCurrency(transaction.subtotal)}</strong>
-        </div>
-
-        <div>
-          <span>${escapeHTML(getDiscountLabel(transaction))}</span>
-          <strong>${formatCurrency(discountAmount)}</strong>
-        </div>
-
-        <div class="transaction-total-due">
-          <span>Total Due</span>
-          <strong>${formatCurrency(transaction.total)}</strong>
-        </div>
-
-        <div>
-          <span>Amount Received</span>
-          <strong>${formatCurrency(getReceived(transaction))}</strong>
-        </div>
-
-        <div>
-          <span>Change</span>
-          <strong>${formatCurrency(getChange(transaction))}</strong>
-        </div>
-      </div>
-
-                  ${user.role === "Admin" && !reversed && requestStatus !== "pending" ? adminActionsHTML : requestContent}
-    </div>
-  `;
+    `;
 
   const modal = openModal({
     title: "Transaction Details",
@@ -571,32 +568,32 @@ function showTransactionDetails(transaction, user, container) {
 // ---------- RENDER TRANSACTIONS ----------
 export async function renderTransactions(container, user) {
   container.innerHTML = `
-    <h1 class="page-title">Transactions</h1>
-    <p class="muted">Loading transaction records...</p>
-  `;
+      <h1 class="page-title">Transactions</h1>
+      <p class="muted">Loading transaction records...</p>
+    `;
 
   try {
     const transactions = await api.getTransactions(user);
 
     container.innerHTML = `
-      <div class="page-header">
-        <div>
-          <h1 class="page-title">
-            ${
-              user.role === "Admin"
-                ? "Transactions & Approvals"
-                : "My Transactions"
-            }
-          </h1>
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">
+              ${
+                user.role === "Admin"
+                  ? "Transactions & Approvals"
+                  : "Transactions"
+              }
+            </h1>
 
-          <p class="muted">
-            View receipts and review saved sales transactions.
-          </p>
+            <p class="muted">
+              View receipts and review saved sales transactions.
+            </p>
+          </div>
         </div>
-      </div>
 
-      <div id="transactions-table"></div>
-    `;
+        <div id="transactions-table"></div>
+      `;
 
     const tableContainer = container.querySelector("#transactions-table");
 
@@ -663,11 +660,6 @@ export async function renderTransactions(container, user) {
           predicate: (t) => getStatus(t).toLowerCase() === "completed",
         },
         {
-          label: "Pending",
-          value: "pending",
-          predicate: (t) => getStatus(t).toLowerCase() === "pending",
-        },
-        {
           label: "Voided",
           value: "voided",
           predicate: (t) => getStatus(t).toLowerCase() === "voided",
@@ -692,12 +684,12 @@ export async function renderTransactions(container, user) {
       container.insertAdjacentHTML(
         "beforeend",
         `
-          <h2 class="page-title" style="margin-top:2rem">
-            Approval Requests
-          </h2>
+            <h2 class="page-title" style="margin-top:2rem">
+              Approval Requests
+            </h2>
 
-          <div id="approvals-table"></div>
-        `,
+            <div id="approvals-table"></div>
+          `,
       );
 
       await renderApprovals(
@@ -710,11 +702,11 @@ export async function renderTransactions(container, user) {
     console.error("Transactions loading error:", error);
 
     container.innerHTML = `
-      <h1 class="page-title">Transactions</h1>
+        <h1 class="page-title">Transactions</h1>
 
-      <p class="muted">
-        Unable to load transactions. Please try again.
-      </p>
-    `;
+        <p class="muted">
+          Unable to load transactions. Please try again.
+        </p>
+      `;
   }
 }

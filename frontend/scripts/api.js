@@ -8,6 +8,7 @@ const USERS = [
     password: "1234",
     name: "Elle Santos",
     role: "Cashier",
+    contactNumber: "0918 333 4444",
     active: true,
   },
   {
@@ -16,6 +17,7 @@ const USERS = [
     password: "1234",
     name: "Sallie De Guzman",
     role: "Admin",
+    contactNumber: "0917 111 2222",
     active: true,
   },
 ];
@@ -73,6 +75,19 @@ export async function getUsers() {
   }));
 }
 
+function cleanContact(value) {
+  const contact = String(value || "").trim();
+  const digits = contact.replace(/\D/g, "");
+  if (
+    !/^[0-9+\-\s()]+$/.test(contact) ||
+    digits.length < 7 ||
+    digits.length > 15
+  ) {
+    throw new Error("Enter a valid contact number.");
+  }
+  return contact;
+}
+
 export async function addUser(userData) {
   const name = String(userData.name || "").trim();
   const username = String(userData.username || "")
@@ -80,7 +95,7 @@ export async function addUser(userData) {
     .toLowerCase();
   const password = String(userData.password || "");
   const role = userData.role;
-
+  const contactNumber = cleanContact(userData.contactNumber);
   if (!name || !username || !password) {
     throw new Error("Please complete all required fields.");
   }
@@ -99,6 +114,7 @@ export async function addUser(userData) {
     username,
     password,
     role,
+    contactNumber,
     active: true,
   };
 
@@ -138,6 +154,10 @@ export async function updateUser(id, updates) {
       throw new Error("Invalid account role.");
     }
     user.role = updates.role;
+  }
+
+  if (updates.contactNumber !== undefined) {
+    user.contactNumber = cleanContact(updates.contactNumber);
   }
 
   if (updates.active !== undefined) user.active = Boolean(updates.active);

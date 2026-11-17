@@ -4,7 +4,7 @@ import * as api from "./api.js";
 const CATEGORIES = [
   "All",
   "Meals",
-  "Snacks & Sides",
+  "Snacks and Sides",
   "Desserts and Drinks",
   "Whole Lechon",
 ];
@@ -617,10 +617,17 @@ export async function renderPos(container, user) {
   // Clock in the invoice header
   const timeEl = document.getElementById("cart-time");
   const tick = () => {
-    timeEl.textContent = new Date()
-      .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-      .replace(" ", "")
-      .toLowerCase();
+    const now = new Date();
+    const date = now.toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+    const time = now.toLocaleTimeString("en-PH", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    timeEl.innerHTML = `<span>${date}</span><span>${time}</span>`;
   };
   tick();
   const timer = setInterval(() => {

@@ -2,6 +2,7 @@
 
 import * as api from "./api.js";
 import { escapeHTML, openModal } from "./components.js";
+import { addPasswordToggle } from "./password-toggle.js";
 
 // ---------- CUSTOM ACCOUNT NOTICE ----------
 function showAccountNotice(title, message, type = "success") {
@@ -117,7 +118,7 @@ export function renderAccounts(container, currentUser) {
 
         <button class="btn btn--primary accounts-add-btn" id="add-account-btn" type="button">
           <i class="bi bi-plus-lg"></i>
-          <span>Add Account</span>
+          <span>Create New Account</span>
         </button>
       </div>
 
@@ -126,7 +127,7 @@ export function renderAccounts(container, currentUser) {
           type="search"
           id="account-search"
           class="input accounts-search"
-          placeholder="Search by name, username, or role..."
+          placeholder="Search by name, username, contact, or role..."
           aria-label="Search accounts"
         />
       </div>
@@ -141,6 +142,7 @@ export function renderAccounts(container, currentUser) {
               <tr>
                 <th>Full Name</th>
                 <th>Username</th>
+                <th>Contact Number</th>
                 <th>Role</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -161,6 +163,7 @@ export function renderAccounts(container, currentUser) {
               <tr>
                 <th>Full Name</th>
                 <th>Username</th>
+                <th>Contact Number</th>
                 <th>Role</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -186,13 +189,14 @@ export function renderAccounts(container, currentUser) {
     } catch (error) {
       console.error("Unable to load accounts:", error);
 
-      tableBody.innerHTML = `
-        <tr>
-          <td colspan="5" style="text-align:center;padding:25px;">
-            Unable to load accounts.
-          </td>
-        </tr>
-      `;
+      const failed = `
+              <tr>
+                <td colspan="6" style="text-align:center;padding:25px;">
+                 Unable to load accounts.
+                </td>
+              </tr>`;
+      activeBody.innerHTML = failed;
+      inactiveBody.innerHTML = failed;
     }
   }
 
@@ -205,6 +209,7 @@ export function renderAccounts(container, currentUser) {
       <tr>
         <td><strong>${escapeHTML(user.name)}</strong></td>
         <td>${escapeHTML(user.username)}</td>
+        <td>${escapeHTML(user.contactNumber || "—")}</td>
         <td>${escapeHTML(user.role)}</td>
         <td>
           <span class="status-chip ${user.active ? "status-active" : "status-inactive"}">
@@ -241,7 +246,7 @@ export function renderAccounts(container, currentUser) {
       ? users.map(accountRow).join("")
       : `
         <tr>
-          <td colspan="5" style="text-align:center;padding:25px;">
+          <td colspan="6" style="text-align:center;padding:25px;">
             ${emptyText}
           </td>
         </tr>
@@ -257,6 +262,9 @@ export function renderAccounts(container, currentUser) {
           .toLowerCase()
           .includes(term) ||
         String(user.username || "")
+          .toLowerCase()
+          .includes(term) ||
+        String(user.contactNumber || "")
           .toLowerCase()
           .includes(term) ||
         String(user.role || "")
@@ -479,6 +487,20 @@ export function renderAccounts(container, currentUser) {
               </div>
             </div>
 
+            <div class="account-form-group">
+              <label for="account-contact">Contact Number</label>
+              <input
+               id="account-contact"
+               name="contactNumber"
+               class="form-control"
+               type="tel"
+               inputmode="tel"
+               placeholder="e.g. 0917 123 4567"
+               value="${escapeHTML(user?.contactNumber || "")}"
+               required
+              />
+          </div>
+
             <div class="account-form-section">
               <h3>Account Security</h3>
 
@@ -548,6 +570,7 @@ export function renderAccounts(container, currentUser) {
     `;
 
     document.body.appendChild(modal);
+    addPasswordToggle(modal.querySelector("#account-password"));
 
     const closeModal = () => modal.remove();
 
@@ -581,6 +604,7 @@ export function renderAccounts(container, currentUser) {
       const data = {
         name: String(formData.get("name") || "").trim(),
         username: String(formData.get("username") || "").trim(),
+        contactNumber: String(formData.get("contactNumber") || "").trim(),
         password: formData.get("password"),
         role: formData.get("role"),
       };
