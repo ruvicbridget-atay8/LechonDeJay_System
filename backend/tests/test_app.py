@@ -1,13 +1,172 @@
 import sys
 import os
+from unittest.mock import MagicMock
+
+import pytest
 
 # Ensure Python can find the backend module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from run import app
+import run
 
+app = run.app
+
+# Checks the health endpoint. Expected: HTTP 200 with {"status": "ok"}.
 def test_health_endpoint():
     client = app.test_client()
     response = client.get('/health')
     assert response.status_code == 200
     assert response.get_json() == {"status": "ok"}
+
+
+# Checks missing and disallowed access. Expected: 401 without a session and 403 for another active role.
+def test_auth_endpoints_reject_missing_and_disallowed_users(monkeypatch):
+    from app.services import auth_service
+
+    client = app.test_client()
+    assert client.get("/auth/me").status_code == 401
+    assert client.post("/auth/logout").status_code == 401
+
+    monkeypatch.setattr(
+        auth_service,
+        "_get_account",
+        lambda user_id: {
+            "user_id": user_id,
+            "full_name": "Test User",
+            "username": "test",
+            "role": "Manager",
+            "account_status": "Active",
+        },
+    )
+    with client.session_transaction() as session:
+        session["user_id"] = 1
+
+    assert client.get("/auth/me").status_code == 403
+    assert client.post("/auth/logout").status_code == 403
+
+
+# Checks allowed roles. Expected: Cashier/Admin can view /me and logout clears the session.
+@pytest.mark.parametrize("role", ["Cashier", "Admin"])
+def test_cashier_and_admin_can_access_auth_endpoints(monkeypatch, role):
+    from app.services import auth_service
+
+    monkeypatch.setattr(
+        auth_service,
+        "_get_account",
+        lambda user_id: {
+            "user_id": user_id,
+            "full_name": "Test User",
+            "username": "test",
+            "role": role,
+            "account_status": "Active",
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session:
+        session["user_id"] = 1
+
+    response = client.get("/auth/me")
+    assert response.status_code == 200
+    assert response.get_json()["role"] == role
+
+    response = client.post("/auth/logout")
+    assert response.status_code == 200
+    with client.session_transaction() as session:
+        assert "user_id" not in session
+
+
+# Checks public login. Expected: HTTP 200, a session is created, and no password hash is returned.
+def test_login_is_public_and_creates_session(monkeypatch):
+    from app.routes import auth
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate",
+        lambda username, password: {
+            "user_id": 1,
+            "username": username,
+            "full_name": "Test User",
+            "role": "Cashier",
+            "password_hash": "not-returned",
+        },
+    )
+    client = app.test_client()
+
+    response = client.post(
+        "/auth/login",
+        json={"username": "test", "password": "password"},
+    )
+
+    assert response.status_code == 200
+    assert "password_hash" not in response.get_json()
+    with client.session_transaction() as session:
+        assert session["user_id"] == 1
+        assert session["role"] == "Cashier"
+
+
+# Checks database probe failures. Expected: HTTP 503 with a generic message, not internal error details.
+def test_database_test_hides_error_details(monkeypatch):
+    def fail_probe(sql):
+        raise RuntimeError("private database details")
+
+    monkeypatch.setattr(run, "fetch_one", fail_probe)
+    response = app.test_client().get("/database-test")
+
+    assert response.status_code == 503
+    assert response.get_json() == {
+        "status": "error",
+        "message": "Database unavailable.",
+    }
+
+
+# Checks transaction/error handling. Expected: commit or rollback correctly; unknown trigger text is replaced with a safe 400.
+def test_db_transaction_commits_or_rolls_back_safely(monkeypatch):
+    from app.services import database_service
+
+    success_cursor = MagicMock()
+    success_connection = MagicMock()
+    success_connection.cursor.return_value = success_cursor
+    error_cursor = MagicMock()
+    error_connection = MagicMock()
+    error_connection.cursor.return_value = error_cursor
+    connections = iter((success_connection, error_connection))
+    monkeypatch.setattr(database_service, "get_connection", lambda: next(connections))
+
+    with database_service.db_transaction() as transaction_cursor:
+        assert transaction_cursor is success_cursor
+
+    success_connection.commit.assert_called_once()
+    success_connection.rollback.assert_not_called()
+    success_cursor.close.assert_called_once()
+    success_connection.close.assert_called_once()
+
+    with pytest.raises(database_service.DatabaseError) as error:
+        with database_service.db_transaction():
+            raise database_service.mysql.connector.Error(
+                msg="duplicate key details",
+                errno=1062,
+            )
+
+    assert error.value.status == 409
+    assert error.value.message == "That value already exists."
+    error_connection.rollback.assert_called_once()
+    error_connection.commit.assert_not_called()
+    error_cursor.close.assert_called_once()
+    error_connection.close.assert_called_once()
+
+    approved_signal = database_service.translate_error(
+        database_service.mysql.connector.Error(
+            msg="Not enough stock for this movement.",
+            errno=1644,
+        )
+    )
+    assert approved_signal.message == "Not enough stock for this movement."
+
+    unknown_signal = database_service.translate_error(
+        database_service.mysql.connector.Error(
+            msg="private database details",
+            errno=1644,
+        )
+    )
+    assert unknown_signal.status == 400
+    assert unknown_signal.message == "The operation was rejected by a business rule."
