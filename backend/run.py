@@ -3,6 +3,8 @@ from flask_cors import CORS
 from config import Config
 from app.services.database_service import get_connection
 
+from app.routes.auth import auth_bp
+
 app = Flask(__name__)
 
 # Config
@@ -40,6 +42,7 @@ def database_test():
         }
 
 # System Routes
+app.register_blueprint(auth_bp)
 
 
 if __name__ == "__main__":
