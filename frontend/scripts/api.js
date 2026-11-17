@@ -365,9 +365,14 @@ export async function addProduct(productData) {
   const price = Number(productData.price);
   const stock = Number(productData.stock);
   const reorderLevel = Number(productData.reorderLevel);
+  const expiryDate = String(productData.expiryDate || "").trim();
 
   if (!sku || !name || !category || !productType || !unit) {
     throw new Error("Please complete all required fields.");
+  }
+
+  if (!expiryDate) {
+  throw new Error("Expiry Date is required.");
   }
 
   if (!/^[A-Z0-9-]+$/.test(sku)) {
@@ -456,9 +461,14 @@ export async function updateProduct(sku, updates) {
   const price = Number(updates.price);
   const stock = Number(updates.stock);
   const reorderLevel = Number(updates.reorderLevel);
+  const expiryDate = String(updates.expiryDate || "").trim();
 
   if (!name || !category || !productType || !unit) {
     throw new Error("Please complete all required fields.");
+  }
+
+  if (!expiryDate) {
+  throw new Error("Expiry Date is required.");
   }
 
   if (!["Finished good", "Raw material"].includes(productType)) {
@@ -508,7 +518,7 @@ export async function updateProduct(sku, updates) {
     stock,
     unit,
     reorderLevel,
-    expiryDate: updates.expiryDate || null,
+    expiryDate,
     status: stock > 0 ? "Available" : "Unavailable",
   });
 
@@ -556,6 +566,29 @@ export async function archiveProduct(sku) {
 
   product.status = "Archived";
   product.archivedAt = new Date().toISOString();
+
+  return { ...product };
+}
+
+// ---------- Restore Archived Product ----------
+export async function restoreProduct(sku) {
+  const product = PRODUCTS.find(
+    (item) => item.sku === String(sku).trim().toUpperCase(),
+  );
+
+  if (!product) {
+    throw new Error("Product not found.");
+  }
+
+  if (product.status !== "Archived") {
+    throw new Error("This product is not archived.");
+  }
+
+  product.status = Number(product.stock) > 0
+    ? "Available"
+    : "Unavailable";
+
+  delete product.archivedAt;
 
   return { ...product };
 }

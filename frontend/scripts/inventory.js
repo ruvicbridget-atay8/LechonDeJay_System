@@ -180,7 +180,7 @@ function productFormContent(product = null) {
         </div>
 
         <div class="field" style="grid-column:1/-1;">
-          <label for="product-expiry">Expiry Date (Optional)</label>
+          <label for="product-expiry">Expiry Date *</label>
           <input class="input" id="product-expiry" name="expiryDate"
             type="date" value="${escapeHTML(product?.expiryDate || "")}" />
         </div>
@@ -540,8 +540,16 @@ export async function renderInventory(container, user) {
 
         render: (product) => {
           if (getProductStatus(product) === "Archived") {
-            return `<span class="inventory-archived-label">Archived</span>`;
-          }
+            return `
+            <button
+              type="button"
+              class="btn btn-primary inventory-restore"
+              data-sku="${escapeHTML(product.sku)}"
+            >
+              Restore
+           </button>
+        `;
+      }
 
           return `
             <div class="inventory-actions">
@@ -615,66 +623,92 @@ export async function renderInventory(container, user) {
       });
     }
 
-    // ---------- EDIT AND ARCHIVE ----------
-    tableContainer.addEventListener("click", async (event) => {
-      const target = event.target;
+// ---------- EDIT, ARCHIVE, AND RESTORE ----------
+tableContainer.addEventListener("click", async (event) => {
+  const target = event.target;
 
-      if (!(target instanceof Element)) return;
+  if (!(target instanceof Element)) return;
 
-      const editButton = target.closest(".inventory-edit");
-      const archiveButton = target.closest(".inventory-archive");
+  const editButton = target.closest(".inventory-edit");
+  const archiveButton = target.closest(".inventory-archive");
+  const restoreButton = target.closest(".inventory-restore");
 
-      if (!editButton && !archiveButton) return;
+  if (!editButton && !archiveButton && !restoreButton) return;
 
-      const clickedButton = editButton || archiveButton;
-      const sku = clickedButton.dataset.sku;
+  const clickedButton = editButton || archiveButton || restoreButton;
+  const sku = clickedButton.dataset.sku;
 
-      if (!sku || clickedButton.disabled) return;
+  if (!sku || clickedButton.disabled) return;
 
-      clickedButton.disabled = true;
+  clickedButton.disabled = true;
 
-      try {
-        const latestProducts = await api.getProducts();
+  try {
+    const latestProducts = await api.getProducts();
 
-        const product = latestProducts.find(
-          (item) => String(item.sku).toUpperCase() === sku.toUpperCase()
-        );
+    const product = latestProducts.find(
+      (item) => String(item.sku).toUpperCase() === sku.toUpperCase()
+    );
 
-        if (!product) {
-          showInventoryNotice(
-            "Product Not Found",
-            "Product could not be found. Please refresh the inventory.",
-            "error"
-          );
-          return;
-        }
+    if (!product) {
+      showInventoryNotice(
+        "Product Not Found",
+        "Product could not be found. Please refresh the inventory.",
+        "error"
+      );
+      return;
+    }
 
-        if (product.status === "Archived") {
-          showInventoryNotice(
-            "Product Already Archived",
-            "This product is already archived.",
-            "error"
-          );
-          return;
-        }
-
-        if (editButton) {
-          renderProductModal(table, product);
-        } else {
-          renderArchiveConfirmation(table, product);
-        }
-
-      } catch (error) {
+    // ---------- RESTORE PRODUCT ----------
+    if (restoreButton) {
+      if (product.status !== "Archived") {
         showInventoryNotice(
-          "Unable to Open Product",
-          error.message || "Unable to open product action.",
+          "Product Not Archived",
+          "This product is not archived.",
           "error"
         );
-
-      } finally {
-        clickedButton.disabled = false;
+        return;
       }
-    });
+
+      await api.restoreProduct(product.sku);
+
+      const updatedProducts = await api.getProducts();
+      table.setData(updatedProducts);
+
+      showInventoryNotice(
+        "Product Restored",
+        "Product successfully restored to inventory."
+      );
+
+      return;
+    }
+
+    // Prevent editing or archiving an archived product.
+    if (product.status === "Archived") {
+      showInventoryNotice(
+        "Product Already Archived",
+        "This product is already archived.",
+        "error"
+      );
+      return;
+    }
+
+    if (editButton) {
+      renderProductModal(table, product);
+    } else if (archiveButton) {
+      renderArchiveConfirmation(table, product);
+    }
+
+  } catch (error) {
+    showInventoryNotice(
+      "Unable to Process Product",
+      error.message || "Unable to process product action.",
+      "error"
+    );
+
+  } finally {
+    clickedButton.disabled = false;
+  }
+});
 
   } catch (error) {
     container.innerHTML = `

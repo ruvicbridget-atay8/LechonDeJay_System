@@ -249,7 +249,7 @@ export async function renderStock(container, user) {
                 <div class="field">
                   <label for="movement-quantity"
                          id="quantity-label">
-                    Quantity to Add
+                    Quantity
                   </label>
 
                   <input id="movement-quantity"
@@ -337,7 +337,7 @@ export async function renderStock(container, user) {
             const type = typeInput.value;
 
             if (type === "in") {
-              quantityLabel.textContent = "Quantity to Add";
+              quantityLabel.textContent = "Quantity";
 
               quantityHelp.textContent =
                 "Enter the amount to add to the current stock.";

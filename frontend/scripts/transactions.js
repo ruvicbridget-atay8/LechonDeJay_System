@@ -2,7 +2,6 @@
 
 import * as api from "./api.js";
 import { renderApprovals } from "./approvals.js";
-import { showEditTransaction } from "./edit-transaction.js";
 import {
   renderTable,
   statusChip,
@@ -296,43 +295,88 @@ function showTransactionDetails(transaction, user, container) {
   const discountAmount = getDiscountAmount(transaction);
 
   const adminActionsHTML = `
-      <div class="approval-actions">
-        <button type="button" class="btn btn--soft" id="edit-transaction-btn">Edit Transaction</button>
-        <button type="button" class="btn btn--primary" id="admin-void-btn">Void / Refund</button>
-      </div>
-
-      <form id="admin-void-form" class="transaction-request-form" hidden>
-        <h3>Void / Refund</h3>
-
-        <div class="form-group">
-          <label for="admin-void-type">Type *</label>
-          <select id="admin-void-type" name="requestType" required>
-            <option value="">Select Void or Refund</option>
-            <option value="Void">Void</option>
-            <option value="Refund">Refund</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="admin-void-reason">Reason *</label>
-          <textarea
-            id="admin-void-reason"
-            name="reason"
-            rows="3"
-            maxlength="500"
-            placeholder="Explain the reason..."
-            required
-          ></textarea>
-        </div>
-
-        <p id="admin-void-error" class="transaction-request-error" role="alert" hidden></p>
-
         <div class="approval-actions">
-          <button type="button" class="btn btn--soft" id="admin-void-cancel">Cancel</button>
-          <button type="submit" class="btn btn--primary" id="admin-void-submit">Apply</button>
+          <button
+            type="button"
+            class="btn btn--primary"
+            id="admin-void-btn"
+          >
+            Void / Refund
+          </button>
         </div>
-      </form>
-    `;
+
+        <form
+          id="admin-void-form"
+          class="transaction-request-form"
+          hidden
+        >
+          <h3>Void / Refund</h3>
+
+          <div class="form-group">
+            <label>Type *</label>
+
+            <div>
+              <label>
+                <input
+                  type="radio"
+                  name="requestType"
+                  value="Void"
+                  required
+                >
+                Void
+              </label>
+
+              <label>
+                <input
+                  type="radio"
+                  name="requestType"
+                  value="Refund"
+                  required
+                >
+                Refund
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="admin-void-reason">Reason *</label>
+
+            <textarea
+              id="admin-void-reason"
+              name="reason"
+              rows="3"
+              maxlength="500"
+              placeholder="Explain the reason..."
+              required
+            ></textarea>
+          </div>
+
+          <p
+            id="admin-void-error"
+            class="transaction-request-error"
+            role="alert"
+            hidden
+          ></p>
+
+          <div class="approval-actions">
+            <button
+              type="button"
+              class="btn btn--soft"
+              id="admin-void-cancel"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              class="btn btn--primary"
+              id="admin-void-submit"
+            >
+              Apply
+            </button>
+          </div>
+        </form>
+`;
 
   const content = `
       <div class="transaction-status-section transaction-status-top">
@@ -451,70 +495,85 @@ function showTransactionDetails(transaction, user, container) {
 
   if (reversed || requestStatus === "pending") return;
 
-  if (user.role === "Admin") {
-    const voidForm = document.getElementById("admin-void-form");
-    const voidBtn = document.getElementById("admin-void-btn");
+if (user.role === "Admin") {
+  const voidForm = modal?.element?.querySelector("#admin-void-form");
+  const voidBtn = modal?.element?.querySelector("#admin-void-btn");
 
-    document
-      .getElementById("edit-transaction-btn")
-      ?.addEventListener("click", () => {
-        modal?.close?.();
-        showEditTransaction(transaction, user, () =>
-          renderTransactions(container, user),
-        );
-      });
+  const errorEl = modal?.element?.querySelector("#admin-void-error");
+  const submitBtn = modal?.element?.querySelector("#admin-void-submit");
+  const cancelBtn = modal?.element?.querySelector("#admin-void-cancel");
 
-    voidBtn?.addEventListener("click", () => {
-      voidForm.hidden = false;
-      voidBtn.disabled = true;
-      voidForm.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  voidBtn?.addEventListener("click", () => {
+    if (!voidForm) return;
+
+    voidForm.hidden = false;
+    voidBtn.disabled = true;
+
+    voidForm.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
     });
+  });
 
-    document
-      .getElementById("admin-void-cancel")
-      ?.addEventListener("click", () => {
-        voidForm.hidden = true;
-        voidBtn.disabled = false;
-      });
+  cancelBtn?.addEventListener("click", () => {
+    if (!voidForm) return;
 
-    voidForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
+    voidForm.reset();
+    voidForm.hidden = true;
+    voidBtn.disabled = false;
 
-      const type = voidForm.elements.requestType.value;
-      const reasonText = voidForm.elements.reason.value.trim();
-      const errorEl = document.getElementById("admin-void-error");
-      const submitBtn = document.getElementById("admin-void-submit");
-
+    if (errorEl) {
       errorEl.hidden = true;
+      errorEl.textContent = "";
+    }
+  });
 
-      if (!type || !reasonText) {
-        errorEl.textContent = "Select Void or Refund and enter the reason.";
-        errorEl.hidden = false;
-        return;
-      }
+  voidForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
 
-      submitBtn.disabled = true;
-      submitBtn.textContent = "Applying...";
+    const type = voidForm.querySelector(
+      'input[name="requestType"]:checked'
+    )?.value;
 
-      try {
-        await api.voidRefundTransaction(
-          transaction.transactionId,
-          type,
-          reasonText,
-          user.name,
-        );
-        modal?.close?.();
-        await renderTransactions(container, user);
-      } catch (error) {
-        errorEl.textContent = error.message || "Unable to apply the change.";
-        errorEl.hidden = false;
-        submitBtn.disabled = false;
-        submitBtn.textContent = "Apply";
-      }
-    });
+    const reasonText = voidForm.elements.reason.value.trim();
 
-    return;
-  }
+    errorEl.hidden = true;
+
+    if (!type || !reasonText) {
+      errorEl.textContent =
+        "Choose Void or Refund and enter the reason.";
+
+      errorEl.hidden = false;
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Applying...";
+
+    try {
+      await api.voidRefundTransaction(
+        transaction.transactionId,
+        type,
+        reasonText,
+        user.name
+      );
+
+      modal?.close?.();
+
+      await renderTransactions(container, user);
+    } catch (error) {
+      errorEl.textContent =
+        error.message || "Unable to apply the change.";
+
+      errorEl.hidden = false;
+
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Apply";
+    }
+  });
+
+  return;
+}
 
   const form = modal?.element?.querySelector("#void-refund-form");
 
