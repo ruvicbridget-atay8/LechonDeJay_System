@@ -3,6 +3,7 @@ from flask_cors import CORS
 from config import Config
 from app.services.database_service import DatabaseError, fetch_one
 from app.routes.auth import auth_bp
+from app.routes.users import users_bp
 
 app = Flask(__name__)
 
@@ -40,6 +41,7 @@ def database_test():
 
 # System Routes
 app.register_blueprint(auth_bp)
+app.register_blueprint(users_bp)
 
 
 if __name__ == "__main__":

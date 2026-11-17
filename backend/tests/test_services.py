@@ -89,6 +89,7 @@ def test_list_users_searches_without_returning_password_hash(monkeypatch):
 
     assert result == rows
     assert "password_hash" not in query["sql"]
+    assert "role LIKE %s" in query["sql"]
     assert query["params"] == ("%test%", "%test%", "%test%")
 
 

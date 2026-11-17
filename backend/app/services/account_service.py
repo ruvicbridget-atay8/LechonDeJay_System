@@ -80,7 +80,7 @@ def deactivate_user(user_id):
 
 
 def list_users(search=None):
-    """List users without password hashes, optionally searching name, username, or contact."""
+    """List users without password hashes, optionally searching name, username, or role."""
     query = f"""
         SELECT {_USER_COLUMNS}
         FROM users
@@ -94,7 +94,7 @@ def list_users(search=None):
             query += """
                 WHERE full_name LIKE %s
                    OR username LIKE %s
-                   OR contact_number LIKE %s
+                   OR role LIKE %s
             """
             pattern = f"%{search}%"
             params = (pattern, pattern, pattern)
