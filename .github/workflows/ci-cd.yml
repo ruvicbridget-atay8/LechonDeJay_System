@@ -5,11 +5,13 @@ on:
     branches:
       - develop
       - main
+      - backend
 
   pull_request:
     branches:
       - develop
       - main
+      - backend
 
 jobs:
   frontend-validation:
