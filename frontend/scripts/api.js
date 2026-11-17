@@ -1,27 +1,8 @@
 // api.js: mock data for now.
+const readData = (id) =>
+  JSON.parse(document.getElementById(id)?.textContent || "[]");
 
-// ---------- Users ----------
-const USERS = [
-  {
-    id: 1,
-    username: "cashier",
-    password: "1234",
-    name: "Elle Santos",
-    role: "Cashier",
-    contactNumber: "0918 333 4444",
-    active: true,
-  },
-  {
-    id: 2,
-    username: "admin",
-    password: "1234",
-    name: "Sallie De Guzman",
-    role: "Admin",
-    contactNumber: "0917 111 2222",
-    active: true,
-  },
-];
-
+const USERS = readData("data-users");
 const SESSION_KEY = "lechon_session";
 let memorySession = null;
 
