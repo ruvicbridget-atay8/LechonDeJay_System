@@ -4,6 +4,8 @@ from config import Config
 from app.services.database_service import DatabaseError, fetch_one
 from app.routes.auth import auth_bp
 from app.routes.users import users_bp
+from app.routes.discounts import discounts_bp
+from app.routes.transactions import transactions_bp
 
 app = Flask(__name__)
 
@@ -42,7 +44,8 @@ def database_test():
 # System Routes
 app.register_blueprint(auth_bp)
 app.register_blueprint(users_bp)
-
+app.register_blueprint(discounts_bp)
+app.register_blueprint(transactions_bp)
 
 if __name__ == "__main__":
     app.run(debug=False)
