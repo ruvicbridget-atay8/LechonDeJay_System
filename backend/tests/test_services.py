@@ -93,6 +93,35 @@ def test_list_users_searches_without_returning_password_hash(monkeypatch):
     assert query["params"] == ("%test%", "%test%", "%test%")
 
 
+# Checks exact role filtering. Expected: role is combined with text search using bound parameters.
+def test_list_users_filters_by_role_and_search(monkeypatch):
+    from app.services import account_service
+
+    query = {}
+
+    def fake_fetch_all(sql, params):
+        query["sql"] = sql
+        query["params"] = params
+        return []
+
+    monkeypatch.setattr(account_service, "fetch_all", fake_fetch_all)
+
+    account_service.list_users("Alice", "Cashier")
+
+    assert "role = %s" in query["sql"]
+    assert query["params"] == ("%Alice%", "%Alice%", "%Alice%", "Cashier")
+
+
+# Checks role filter validation. Expected: unsupported roles are rejected with HTTP 400.
+def test_list_users_rejects_unknown_role():
+    from app.services import account_service
+
+    with pytest.raises(account_service.DatabaseError) as error:
+        account_service.list_users(role="Manager")
+
+    assert error.value.status == 400
+
+
 # Checks category deletion protection. Expected: linked products cause a safe 409 and no delete query.
 def test_delete_category_with_products_is_blocked(monkeypatch):
     from app.services import config_service

@@ -88,6 +88,13 @@ def translate_error(err):
             return DatabaseError(message, 400)
         return DatabaseError("The operation was rejected by a business rule.", 400)
     if code == 1062:
+        message = getattr(err, "msg", "") or ""
+        duplicate_key = message.rsplit(" for key ", 1)[-1].strip(" `'\"")
+        if "username" in duplicate_key.lower():
+            return DatabaseError(
+                "Username already exists. Please choose a different username.",
+                409,
+            )
         return DatabaseError("That value already exists.", 409)
     if code == 1451:
         return DatabaseError("This record is still in use and cannot be removed.", 409)

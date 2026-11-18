@@ -12,7 +12,10 @@ users_bp = Blueprint("users", __name__, url_prefix="/users")
 @users_bp.route("", methods=["GET"])
 @role_required("Admin")
 def list_users():
-    users = account_service.list_users(request.args.get("search"))
+    users = account_service.list_users(
+        search=request.args.get("search"),
+        role=request.args.get("role"),
+    )
     return jsonify({"success": True, "users": users})
 
 

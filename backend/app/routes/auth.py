@@ -30,12 +30,16 @@ def login():
     session["username"] = user["username"]
     session["full_name"] = user["full_name"]
     session["role"] = user["role"]
+    session["account_status"] = user["account_status"]
 
     return jsonify({
         "success": True,
-        "user_id": user["user_id"],
+        "message": "Login successful",
         "full_name": user["full_name"],
-        "role": user["role"]
+        "role": user["role"],
+        "user_id": user["user_id"],
+        "username": user["username"],
+        "account_status": user["account_status"]
     })
 
 @auth_bp.route("/logout", methods=["POST"])
@@ -49,9 +53,12 @@ def logout():
 @role_required("Cashier", "Admin")
 def current_user():
     return jsonify({
-        "authenticated": True,
+        "success": True,
+        "message": "Authentication successful",
+        "full_name": session["full_name"],
+        "role": session["role"],
         "user_id": session["user_id"],
         "username": session["username"],
-        "full_name": session["full_name"],
-        "role": session["role"]
+        "account_status": session["account_status"],
+        "authenticated": True
     })

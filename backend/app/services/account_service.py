@@ -79,24 +79,34 @@ def deactivate_user(user_id):
     return {"user_id": user_id, "account_status": "Deactivated"}
 
 
-def list_users(search=None):
-    """List users without password hashes, optionally searching name, username, or role."""
+def list_users(search=None, role=None):
+    """List users without password hashes, optionally searching and filtering by role."""
     query = f"""
         SELECT {_USER_COLUMNS}
         FROM users
     """
-    params = ()
+    filters = []
+    params = []
     if search is not None:
         if not isinstance(search, str):
             raise DatabaseError("Search must be text.", 400)
         search = search.strip()
         if search:
-            query += """
-                WHERE full_name LIKE %s
-                   OR username LIKE %s
-                   OR role LIKE %s
-            """
+            filters.append("(full_name LIKE %s OR username LIKE %s OR role LIKE %s)")
             pattern = f"%{search}%"
-            params = (pattern, pattern, pattern)
+            params.extend((pattern, pattern, pattern))
+
+    if role is not None:
+        if not isinstance(role, str):
+            raise DatabaseError("Role must be Admin or Cashier.", 400)
+        role = role.strip()
+        if role and role not in _ALLOWED_ROLES:
+            raise DatabaseError("Role must be Admin or Cashier.", 400)
+        if role:
+            filters.append("role = %s")
+            params.append(role)
+
+    if filters:
+        query += " WHERE " + " AND ".join(filters)
     query += " ORDER BY full_name, user_id"
-    return fetch_all(query, params)
+    return fetch_all(query, tuple(params))

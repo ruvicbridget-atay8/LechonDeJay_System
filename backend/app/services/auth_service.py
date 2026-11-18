@@ -74,8 +74,9 @@ def role_required(*roles):
             if not account or account["account_status"] != "Active":
                 session.clear()
                 return jsonify({
-                    "authenticated": False,
-                    "message": "Login required"
+                    "success": False,
+                    "message": "Login required",
+                    "authenticated": False
                 }), 401
 
             if account["role"] not in roles:
@@ -87,6 +88,7 @@ def role_required(*roles):
             session["username"] = account["username"]
             session["full_name"] = account["full_name"]
             session["role"] = account["role"]
+            session["account_status"] = account["account_status"]
             return f(*args, **kwargs)
         return wrapper
     return decorator

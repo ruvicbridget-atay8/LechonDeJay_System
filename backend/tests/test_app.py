@@ -68,9 +68,21 @@ def test_cashier_and_admin_can_access_auth_endpoints(monkeypatch, role):
     response = client.get("/auth/me")
     assert response.status_code == 200
     assert response.get_json()["role"] == role
+    assert response.get_json()["account_status"] == "Active"
+    assert list(response.get_json()) == [
+        "success",
+        "message",
+        "full_name",
+        "role",
+        "user_id",
+        "username",
+        "account_status",
+        "authenticated",
+    ]
 
     response = client.post("/auth/logout")
     assert response.status_code == 200
+    assert list(response.get_json()) == ["success", "message"]
     with client.session_transaction() as session:
         assert "user_id" not in session
 
@@ -87,6 +99,7 @@ def test_login_is_public_and_creates_session(monkeypatch):
             "username": username,
             "full_name": "Test User",
             "role": "Cashier",
+            "account_status": "Active",
             "password_hash": "not-returned",
         },
     )
@@ -98,6 +111,16 @@ def test_login_is_public_and_creates_session(monkeypatch):
     )
 
     assert response.status_code == 200
+    assert response.get_json()["message"] == "Login successful"
+    assert list(response.get_json()) == [
+        "success",
+        "message",
+        "full_name",
+        "role",
+        "user_id",
+        "username",
+        "account_status",
+    ]
     assert "password_hash" not in response.get_json()
     with client.session_transaction() as session:
         assert session["user_id"] == 1
@@ -153,6 +176,17 @@ def test_db_transaction_commits_or_rolls_back_safely(monkeypatch):
     error_connection.commit.assert_not_called()
     error_cursor.close.assert_called_once()
     error_connection.close.assert_called_once()
+
+    username_conflict = database_service.translate_error(
+        database_service.mysql.connector.Error(
+            msg="Duplicate entry 'test_003' for key 'users.username'",
+            errno=1062,
+        )
+    )
+    assert username_conflict.status == 409
+    assert username_conflict.message == (
+        "Username already exists. Please choose a different username."
+    )
 
     approved_signal = database_service.translate_error(
         database_service.mysql.connector.Error(

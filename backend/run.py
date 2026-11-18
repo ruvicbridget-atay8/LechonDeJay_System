@@ -3,9 +3,12 @@ from flask_cors import CORS
 from config import Config
 from app.services.database_service import DatabaseError, fetch_one
 from app.routes.auth import auth_bp
+from app.routes.inventory import inventory_bp
+from app.routes.stock import stock_bp
 from app.routes.users import users_bp
 
 app = Flask(__name__)
+app.json.sort_keys = False
 
 @app.errorhandler(DatabaseError)
 def handle_database_error(error):
@@ -41,6 +44,8 @@ def database_test():
 
 # System Routes
 app.register_blueprint(auth_bp)
+app.register_blueprint(inventory_bp)
+app.register_blueprint(stock_bp)
 app.register_blueprint(users_bp)
 
 

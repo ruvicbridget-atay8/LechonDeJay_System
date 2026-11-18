@@ -33,8 +33,9 @@ def test_list_users_is_admin_only_and_passes_search(monkeypatch):
     monkeypatch.setattr(auth_service, "_get_account", lambda user_id: account)
     requested_search = {}
 
-    def list_users(search):
+    def list_users(search, role):
         requested_search["search"] = search
+        requested_search["role"] = role
         return []
 
     monkeypatch.setattr(users.account_service, "list_users", list_users)
@@ -49,6 +50,12 @@ def test_list_users_is_admin_only_and_passes_search(monkeypatch):
 
     assert response.status_code == 200
     assert requested_search["search"] == "alice"
+    assert requested_search["role"] is None
+
+    response = client.get("/users?role=Cashier")
+    assert response.status_code == 200
+    assert requested_search["search"] is None
+    assert requested_search["role"] == "Cashier"
 
 
 # Checks account creation. Expected: Admin receives HTTP 201 and the service gets the submitted fields.
