@@ -64,6 +64,7 @@ export function renderShell(user, pages, onLogout) {
             </div>
           </div>
         </header>
+        <div class="alert" id="shell-error" role="alert" hidden></div>
         <main class="content" id="content"></main>
       </div>
     </div>`;
@@ -119,11 +120,23 @@ export function renderShell(user, pages, onLogout) {
   document.getElementById("sidebar-close").addEventListener("click", toggleMenu);
   document.getElementById("backdrop").addEventListener("click", () => shell.classList.remove("is-open"));
 
-  document.getElementById("logout").addEventListener("click", () => {
-    api.logout();
-    window.removeEventListener("hashchange", onHash);
-    history.replaceState(null, "", location.pathname);
-    onLogout();
+  const logoutButton = document.getElementById("logout");
+  const shellError = document.getElementById("shell-error");
+  logoutButton.addEventListener("click", async () => {
+    logoutButton.disabled = true;
+    shellError.hidden = true;
+    try {
+      await api.logout();
+      window.removeEventListener("hashchange", onHash);
+      history.replaceState(null, "", location.pathname);
+      await onLogout();
+    } catch (error) {
+      console.error("Unable to log out:", error);
+      shellError.textContent = error.message || "Unable to log out. Please try again.";
+      shellError.hidden = false;
+    } finally {
+      logoutButton.disabled = false;
+    }
   });
 
   show();

@@ -64,7 +64,7 @@ def _get_account(user_id):
             connection.close()
 
 
-def role_required(*roles):
+def role_required(*roles, unauthenticated_status=401):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
@@ -77,7 +77,7 @@ def role_required(*roles):
                     "success": False,
                     "message": "Login required",
                     "authenticated": False
-                }), 401
+                }), unauthenticated_status
 
             if account["role"] not in roles:
                 return jsonify({

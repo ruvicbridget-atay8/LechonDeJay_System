@@ -1,51 +1,108 @@
-// api.js: mock data for now.
+// api.js: session authentication plus mock application data.
 const readData = (id) =>
   JSON.parse(document.getElementById(id)?.textContent || "[]");
 
 const USERS = readData("data-users");
-const SESSION_KEY = "lechon_session";
+const API_BASE_URL = "http://127.0.0.1:5000";
 let memorySession = null;
 
 // ---------- Login and Session ----------
-export async function login(username, password) {
-  const user = USERS.find(
-    (u) =>
-      u.username === username.trim().toLowerCase() &&
-      u.password === password &&
-      u.active !== false,
-  );
-
-  if (!user) {
-    throw new Error("Invalid username or password, or account is inactive.");
+function sessionUser(data) {
+  if (
+    !data ||
+    data.authenticated === false ||
+    data.user_id == null ||
+    typeof data.full_name !== "string" ||
+    typeof data.username !== "string" ||
+    typeof data.role !== "string"
+  ) {
+    throw new Error("The server returned an invalid user profile.");
   }
 
-  const { password: _omit, ...safe } = user;
-  memorySession = safe;
-
-  try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(safe));
-  } catch {}
-
-  return safe;
+  return {
+    id: data.user_id,
+    name: data.full_name,
+    username: data.username,
+    role: data.role,
+    active: data.account_status === "Active",
+  };
 }
 
-export function getSession() {
-  if (memorySession) return memorySession;
+async function authRequest(path, options = {}, allowUnauthenticated = false) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      ...(options.headers || {}),
+    },
+  });
 
+  let data = null;
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    if (raw) memorySession = JSON.parse(raw);
-  } catch {}
+    data = await response.json();
+  } catch {
+    // The status code below remains authoritative for non-JSON responses.
+  }
 
+  if (allowUnauthenticated && response.status === 401) return null;
+  if (!response.ok) {
+    throw new Error(
+      (data && data.message) || `Authentication request failed (${response.status}).`,
+    );
+  }
+  if (!data || typeof data !== "object") {
+    throw new Error("The server returned an invalid authentication response.");
+  }
+
+  return data;
+}
+
+export async function login(credentials) {
+  const username = String(credentials?.username || credentials?.email || "").trim();
+  const password = String(credentials?.password || "");
+
+  if (!username || !password) {
+    throw new Error("Enter your username and password.");
+  }
+
+  const data = await authRequest("/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (data.success !== true) {
+    throw new Error(data.message || "Unable to sign in.");
+  }
+
+  memorySession = sessionUser(data);
   return memorySession;
 }
 
-export function logout() {
-  memorySession = null;
+export async function getCurrentUser() {
+  const data = await authRequest("/auth/me", {}, true);
+  if (!data) {
+    memorySession = null;
+    return null;
+  }
+  if (data.authenticated === false) {
+    memorySession = null;
+    return null;
+  }
+  if (data.authenticated !== true) {
+    throw new Error(data.message || "The server could not verify your session.");
+  }
 
-  try {
-    sessionStorage.removeItem(SESSION_KEY);
-  } catch {}
+  memorySession = sessionUser(data);
+  return memorySession;
+}
+
+export async function logout() {
+  const data = await authRequest("/auth/logout", { method: "POST" }, true);
+  memorySession = null;
+  if (data && data.success !== true) {
+    throw new Error(data.message || "Unable to log out.");
+  }
 }
 
 // ---------- Account Management ----------

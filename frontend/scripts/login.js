@@ -2,7 +2,7 @@
 import * as api from "./api.js";
 import { addPasswordToggle } from "./password-toggle.js";
 
-export function renderLogin(onSuccess) {
+export function renderLogin(onSuccess, initialError = "") {
   document.title = "Sign in | Lechon De Jay";
   document.getElementById("app").innerHTML = `
     <div class="login-page">
@@ -33,8 +33,14 @@ export function renderLogin(onSuccess) {
 
   const form = document.getElementById("login-form");
   const error = document.getElementById("login-error");
+  const submitButton = form.querySelector('button[type="submit"]');
   form.username.focus();
   addPasswordToggle(document.getElementById("password"));
+
+  if (initialError) {
+    error.textContent = initialError;
+    error.hidden = false;
+  }
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -46,14 +52,22 @@ export function renderLogin(onSuccess) {
       return;
     }
 
+    submitButton.disabled = true;
+    submitButton.textContent = "Signing in...";
     try {
-      const user = await api.login(form.username.value, form.password.value);
+      const user = await api.login({
+        username: form.username.value.trim(),
+        password: form.password.value,
+      });
       onSuccess(user);
     } catch (err) {
-      error.textContent = err.message;
+      error.textContent = err.message || "Unable to sign in. Please try again.";
       error.hidden = false;
       form.password.value = "";
       form.password.focus();
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = "Sign in";
     }
   });
 }

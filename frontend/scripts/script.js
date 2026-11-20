@@ -25,15 +25,24 @@ const pages = {
   reports: renderReports,
 };
 
-function start() {
-  const user = api.getSession();
+async function start() {
+  try {
+    const user = await api.getCurrentUser();
+    if (user) {
+      renderShell(user, pages, start);
+      return;
+    }
 
-  if (!user) {
-    renderLogin(start);
-    return;
+    renderLogin((authenticatedUser) =>
+      renderShell(authenticatedUser, pages, start),
+    );
+  } catch (error) {
+    console.error("Unable to verify the current session:", error);
+    renderLogin(
+      (authenticatedUser) => renderShell(authenticatedUser, pages, start),
+      error.message || "Unable to verify your session. Please sign in.",
+    );
   }
-
-  renderShell(user, pages, start);
 }
 
 start();

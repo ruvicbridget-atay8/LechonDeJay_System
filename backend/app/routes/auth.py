@@ -50,7 +50,7 @@ def logout():
 
 
 @auth_bp.route("/me", methods=["GET"])
-@role_required("Cashier", "Admin")
+@role_required("Cashier", "Admin", unauthenticated_status=200)
 def current_user():
     return jsonify({
         "success": True,

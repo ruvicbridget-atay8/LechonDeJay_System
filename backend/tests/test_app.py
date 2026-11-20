@@ -19,12 +19,18 @@ def test_health_endpoint():
     assert response.get_json() == {"status": "ok"}
 
 
-# Checks missing and disallowed access. Expected: 401 without a session and 403 for another active role.
-def test_auth_endpoints_reject_missing_and_disallowed_users(monkeypatch):
+# Checks unauthenticated status and role restrictions for auth endpoints.
+def test_auth_endpoints_report_unauthenticated_and_reject_disallowed_users(monkeypatch):
     from app.services import auth_service
 
     client = app.test_client()
-    assert client.get("/auth/me").status_code == 401
+    me_response = client.get("/auth/me")
+    assert me_response.status_code == 200
+    assert me_response.get_json() == {
+        "success": False,
+        "message": "Login required",
+        "authenticated": False,
+    }
     assert client.post("/auth/logout").status_code == 401
 
     monkeypatch.setattr(
