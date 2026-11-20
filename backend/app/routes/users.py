@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 
 from app.services import account_service
-from app.services.auth_service import role_required
+from app.services import role_required
 
 
 users_bp = Blueprint("users", __name__, url_prefix="/users")

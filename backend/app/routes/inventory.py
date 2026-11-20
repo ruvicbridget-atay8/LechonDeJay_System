@@ -1,9 +1,9 @@
 from flask import Blueprint, jsonify, request, session
 
 from app.services import inventory_service
-from app.services.auth_service import role_required
-from app.services.database_service import DatabaseError
-from app.routes.serialization import json_safe
+from app.services import role_required
+from app.services import DatabaseError
+from app.routes import json_safe
 
 
 inventory_bp = Blueprint("inventory", __name__, url_prefix="/inventory")

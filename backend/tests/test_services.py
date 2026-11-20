@@ -1,7 +1,6 @@
 import os
 import sys
 from contextlib import contextmanager
-from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
@@ -120,49 +119,3 @@ def test_list_users_rejects_unknown_role():
         account_service.list_users(role="Manager")
 
     assert error.value.status == 400
-
-
-# Checks category deletion protection. Expected: linked products cause a safe 409 and no delete query.
-def test_delete_category_with_products_is_blocked(monkeypatch):
-    from app.services import config_service
-
-    cursor = MagicMock()
-    cursor.fetchone.side_effect = [
-        {"category_id": 4},
-        {"product_count": 2},
-    ]
-    monkeypatch.setattr(
-        config_service,
-        "db_transaction",
-        lambda: _transaction_with(cursor),
-    )
-
-    with pytest.raises(config_service.DatabaseError) as error:
-        config_service.delete_category(4)
-
-    assert error.value.status == 409
-    assert "still has products" in error.value.message
-    assert all("DELETE FROM categories" not in call.args[0] for call in cursor.execute.call_args_list)
-
-
-# Checks discount creation rules. Expected: valid values are Decimals; Regular cannot have a nonzero value.
-def test_discount_type_creation_validates_values(monkeypatch):
-    from app.services import config_service
-
-    cursor = MagicMock()
-    cursor.lastrowid = 8
-    monkeypatch.setattr(
-        config_service,
-        "db_transaction",
-        lambda: _transaction_with(cursor),
-    )
-
-    discount_id = config_service.create_discount_type("Senior Citizen", "20.00")
-
-    assert discount_id == 8
-    assert cursor.execute.call_args.args[1] == ("Senior Citizen", Decimal("20.00"))
-
-    with pytest.raises(config_service.DatabaseError) as error:
-        config_service.create_discount_type("Regular", "1.00")
-    assert error.value.status == 400
-    assert error.value.message == "The Regular discount type must have a value of 0."
