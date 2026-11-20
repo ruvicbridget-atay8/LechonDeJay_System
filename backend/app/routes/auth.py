@@ -1,24 +1,23 @@
 from flask import Blueprint, request, jsonify, session
-from app.services.auth_service import authenticate, logout_user
-from flask import session
+from app.services import authenticate, logout_user, role_required
 
-auth_bp = Blueprint("auth", __name__)
+auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-@auth_bp.route("/api/login", methods=["POST"])
+@auth_bp.route("/login", methods=["POST"])
 def login():
-
-    data = request.get_json()
-
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        data = {}
     username = data.get("username")
     password = data.get("password")
 
-    if not username or not password:
+    if not isinstance(username, str) or not username.strip() or not isinstance(password, str) or not password:
         return jsonify({
             "success": False,
             "message": "Username and password are required"
         }), 400
 
-    user = authenticate(username, password)
+    user = authenticate(username.strip(), password)
 
     if not user:
         return jsonify({
@@ -26,36 +25,40 @@ def login():
             "message": "Invalid username or password"
         }), 401
 
+    session.clear()
     session["user_id"] = user["user_id"]
     session["username"] = user["username"]
-    session["role"] = user["role"]  
+    session["full_name"] = user["full_name"]
+    session["role"] = user["role"]
+    session["account_status"] = user["account_status"]
 
     return jsonify({
         "success": True,
-        "user_id": user["user_id"],
+        "message": "Login successful",
         "full_name": user["full_name"],
-        "role": user["role"]
+        "role": user["role"],
+        "user_id": user["user_id"],
+        "username": user["username"],
+        "account_status": user["account_status"]
     })
 
-@auth_bp.route("/api/logout", methods=["POST"])
+@auth_bp.route("/logout", methods=["POST"])
+@role_required("Cashier", "Admin")
 def logout():
-
     result = logout_user()
-
     return jsonify(result)
 
 
-@auth_bp.route("/api/me", methods=["GET"])
+@auth_bp.route("/me", methods=["GET"])
+@role_required("Cashier", "Admin")
 def current_user():
-
-    if "user_id" not in session:
-        return jsonify({
-            "authenticated": False
-        }), 401
-
     return jsonify({
-        "authenticated": True,
+        "success": True,
+        "message": "Authentication successful",
+        "full_name": session["full_name"],
+        "role": session["role"],
         "user_id": session["user_id"],
         "username": session["username"],
-        "role": session["role"]
+        "account_status": session["account_status"],
+        "authenticated": True
     })
