@@ -124,6 +124,94 @@ def test_inventory_mutations_are_admin_only(monkeypatch):
     archive_product.assert_called_once_with(15, 7)
 
 
+def test_restore_product_is_admin_only_and_returns_updated_product(monkeypatch):
+    from app.routes import inventory
+    from app.services import auth_service
+
+    account = _account("Cashier")
+    monkeypatch.setattr(auth_service, "_get_account", lambda _: account)
+    get_product = Mock(return_value={"product_id": 15, "sku": "MEAL-001"})
+    restore_product = Mock(
+        return_value={"product_id": 15, "status": "Available"},
+    )
+    monkeypatch.setattr(inventory.inventory_service, "get_product_by_sku", get_product)
+    monkeypatch.setattr(inventory.inventory_service, "restore_product", restore_product)
+
+    client = app.test_client()
+    assert client.patch("/inventory/MEAL-001/restore").status_code == 401
+    _login_as(client)
+    assert client.patch("/inventory/MEAL-001/restore").status_code == 403
+    get_product.assert_not_called()
+    restore_product.assert_not_called()
+
+    account["role"] = "Admin"
+    response = client.patch("/inventory/MEAL-001/restore")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "success": True,
+        "message": "Product restored successfully.",
+        "product": {"product_id": 15, "status": "Available"},
+    }
+    get_product.assert_called_once_with("MEAL-001")
+    restore_product.assert_called_once_with(15, 7)
+
+
+def test_restore_product_returns_404_for_unknown_sku(monkeypatch):
+    from app.routes import inventory
+    from app.services import auth_service
+
+    monkeypatch.setattr(auth_service, "_get_account", lambda _: _account("Admin"))
+    monkeypatch.setattr(
+        inventory.inventory_service,
+        "get_product_by_sku",
+        Mock(side_effect=inventory.inventory_service.DatabaseError(
+            "Product not found.",
+            404,
+        )),
+    )
+    client = app.test_client()
+    _login_as(client)
+
+    response = client.patch("/inventory/MISSING/restore")
+
+    assert response.status_code == 404
+    assert response.get_json() == {
+        "success": False,
+        "message": "Product not found.",
+    }
+
+
+def test_restore_product_rejects_non_archived_product(monkeypatch):
+    from app.routes import inventory
+    from app.services import auth_service
+
+    monkeypatch.setattr(auth_service, "_get_account", lambda _: _account("Admin"))
+    monkeypatch.setattr(
+        inventory.inventory_service,
+        "get_product_by_sku",
+        Mock(return_value={"product_id": 15, "sku": "MEAL-001"}),
+    )
+    monkeypatch.setattr(
+        inventory.inventory_service,
+        "restore_product",
+        Mock(side_effect=inventory.inventory_service.DatabaseError(
+            "Only archived products can be restored.",
+            400,
+        )),
+    )
+    client = app.test_client()
+    _login_as(client)
+
+    response = client.patch("/inventory/MEAL-001/restore")
+
+    assert response.status_code == 400
+    assert response.get_json() == {
+        "success": False,
+        "message": "Only archived products can be restored.",
+    }
+
+
 # Checks stock movement creation and history filtering. Expected: Admin identity and SKU resolve to the service; dates/types are normalized.
 def test_stock_movement_endpoints_are_admin_only_and_filter_history(monkeypatch):
     from app.routes import stock

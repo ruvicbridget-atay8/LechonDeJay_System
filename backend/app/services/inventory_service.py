@@ -569,6 +569,29 @@ def archive_product(product_id, user_id):
     return {"product_id": product_id, "status": "Archived"}
 
 
+def restore_product(product_id, user_id):
+    """Restore an archived product without changing its stock or price."""
+    product_id = positive_id(product_id, "Product ID")
+    user_id = positive_id(user_id, "User ID")
+    with db_transaction() as cursor:
+        cursor.execute(
+            "SELECT status FROM products WHERE product_id = %s FOR UPDATE",
+            (product_id,),
+        )
+        product = cursor.fetchone()
+        if product is None:
+            raise DatabaseError("Product not found.", 404)
+        if product["status"] != "Archived":
+            raise DatabaseError("Only archived products can be restored.", 400)
+
+        cursor.execute(
+            "UPDATE products SET status = 'Available' WHERE product_id = %s",
+            (product_id,),
+        )
+
+    return {"product_id": product_id, "status": "Available"}
+
+
 def search_products(search_term=None):
     """Search products by SKU, name, or category, including archived items."""
     query = f"""

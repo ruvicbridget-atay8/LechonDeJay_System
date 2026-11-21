@@ -218,6 +218,63 @@ def test_archive_product_updates_status_without_deleting(monkeypatch):
     )
 
 
+def test_restore_product_updates_only_status_without_changing_history(monkeypatch):
+    from app.services import inventory_service
+
+    cursor = MagicMock()
+    cursor.fetchone.return_value = {"status": "Archived"}
+    monkeypatch.setattr(
+        inventory_service,
+        "db_transaction",
+        lambda: _transaction_with(cursor),
+    )
+
+    result = inventory_service.restore_product(15, 7)
+
+    assert result == {"product_id": 15, "status": "Available"}
+    statements = [call.args[0] for call in cursor.execute.call_args_list]
+    product_updates = [sql for sql in statements if "UPDATE products" in sql]
+    assert product_updates == [
+        "UPDATE products SET status = 'Available' WHERE product_id = %s"
+    ]
+    assert all("DELETE" not in sql for sql in statements)
+    assert all("manages" not in sql for sql in statements)
+
+
+@pytest.mark.parametrize(
+    "product,message,status",
+    [
+        ({"status": "Available"}, "Only archived products can be restored.", 400),
+        (None, "Product not found.", 404),
+    ],
+)
+def test_restore_product_rejects_non_archived_or_missing_products(
+    monkeypatch,
+    product,
+    message,
+    status,
+):
+    from app.services import inventory_service
+
+    cursor = MagicMock()
+    cursor.fetchone.return_value = product
+    monkeypatch.setattr(
+        inventory_service,
+        "db_transaction",
+        lambda: _transaction_with(cursor),
+    )
+
+    with pytest.raises(inventory_service.DatabaseError) as error:
+        inventory_service.restore_product(15, 7)
+
+    assert str(error.value) == message
+    assert error.value.status == status
+    assert not any(
+        "UPDATE products" in call.args[0]
+        for call in cursor.execute.call_args_list
+    )
+
+
 # Checks catalog/search/stock flag filters. Expected: available finished goods only in catalog and matching search/flag SQL.
 def test_catalog_and_stock_flags_filter_correctly(monkeypatch):
     from app.services import inventory_service

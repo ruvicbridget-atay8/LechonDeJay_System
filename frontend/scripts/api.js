@@ -200,6 +200,7 @@ export async function deactivateUser(id) {
 // ---------- Products ----------
 const PRODUCTS = readData("data-products");
 
+// Kept for the existing mock transaction and report flows.
 export async function getProducts() {
   return PRODUCTS.map((p) => ({
     ...p,
@@ -207,243 +208,302 @@ export async function getProducts() {
   }));
 }
 
-// ---------- Add Product ----------
-export async function addProduct(productData) {
-  const sku = String(productData.sku || "")
-    .trim()
-    .toUpperCase();
-  const name = String(productData.name || "").trim();
-  const category = String(productData.category || "").trim();
-  const productType = String(productData.productType || "").trim();
-  const unit = String(productData.unit || "").trim();
-
-  const price = Number(productData.price);
-  const stock = Number(productData.stock);
-  const reorderLevel = Number(productData.reorderLevel);
-  const expiryDate = String(productData.expiryDate || "").trim();
-
-  if (!sku || !name || !category || !productType || !unit) {
-    throw new Error("Please complete all required fields.");
-  }
-
-  if (!expiryDate) {
-    throw new Error("Expiry Date is required.");
-  }
-
-  if (!/^[A-Z0-9-]+$/.test(sku)) {
-    throw new Error("SKU may contain only letters, numbers, and hyphens.");
-  }
-
-  if (PRODUCTS.some((p) => p.sku.toUpperCase() === sku)) {
-    throw new Error("This SKU already exists.");
-  }
-
-  if (!["Finished good", "Raw material"].includes(productType)) {
-    throw new Error("Please select a valid product type.");
-  }
-
-  if (!Number.isFinite(price) || price < 0) {
-    throw new Error("Enter a valid price.");
-  }
-
-  if (!Number.isFinite(stock) || stock < 0) {
-    throw new Error("Enter a valid starting stock.");
-  }
-
-  if (!Number.isFinite(reorderLevel) || reorderLevel < 0) {
-    throw new Error("Enter a valid reorder level.");
-  }
-
-  const newProduct = {
-    sku,
-    name,
-    price,
-    category,
-    productType,
-    status: stock > 0 ? "Available" : "Unavailable",
-    image: null,
-    stock,
-    unit,
-    reorderLevel,
-    expiryDate: productData.expiryDate || null,
-  };
-
-  if (category === "Whole Lechon") {
-    const size = String(productData.size || "").trim();
-    const kilos = Number(productData.kilos);
-    const servingPax = Number(productData.servingPax);
-
-    if (!size) throw new Error("Please enter the Whole Lechon size.");
-
-    if (!Number.isFinite(kilos) || kilos <= 0) {
-      throw new Error("Enter a valid weight in kilos.");
-    }
-
-    if (!Number.isFinite(servingPax) || servingPax <= 0) {
-      throw new Error("Enter a valid serving capacity.");
-    }
-
-    newProduct.size = size;
-    newProduct.kilos = kilos;
-    newProduct.servingPax = servingPax;
-  }
-
-  PRODUCTS.push(newProduct);
-
-  return {
-    ...newProduct,
-    image: `assets/productsimage/${newProduct.sku}.jpg`,
-  };
-}
-
-// ---------- Edit Product ----------
-export async function updateProduct(sku, updates) {
-  const product = PRODUCTS.find(
-    (item) => item.sku === String(sku).trim().toUpperCase(),
-  );
-
-  if (!product) throw new Error("Product not found.");
-
-  if (product.status === "Archived") {
-    throw new Error("Archived products cannot be edited.");
-  }
-
-  const name = String(updates.name || "").trim();
-  const category = String(updates.category || "").trim();
-  const productType = String(updates.productType || "").trim();
-  const unit = String(updates.unit || "").trim();
-
-  const price = Number(updates.price);
-  const stock = Number(updates.stock);
-  const reorderLevel = Number(updates.reorderLevel);
-  const expiryDate = String(updates.expiryDate || "").trim();
-
-  if (!name || !category || !productType || !unit) {
-    throw new Error("Please complete all required fields.");
-  }
-
-  if (!expiryDate) {
-    throw new Error("Expiry Date is required.");
-  }
-
-  if (!["Finished good", "Raw material"].includes(productType)) {
-    throw new Error("Please select a valid product type.");
-  }
-
-  if (!Number.isFinite(price) || price < 0) {
-    throw new Error("Enter a valid selling price.");
-  }
-
-  if (!Number.isFinite(stock) || stock < 0) {
-    throw new Error("Enter a valid stock quantity.");
-  }
-
-  if (!Number.isFinite(reorderLevel) || reorderLevel < 0) {
-    throw new Error("Enter a valid reorder level.");
-  }
-
-  const wholeLechon = category === "Whole Lechon";
-  let size = "";
-  let kilos = null;
-  let servingPax = null;
-
-  if (wholeLechon) {
-    size = String(updates.size || "").trim();
-    kilos = Number(updates.kilos);
-    servingPax = Number(updates.servingPax);
-
-    if (!size) throw new Error("Please select the Whole Lechon size.");
-
-    if (!Number.isFinite(kilos) || kilos <= 0) {
-      throw new Error("Enter a valid weight in kilos.");
-    }
-
-    if (!Number.isFinite(servingPax) || servingPax <= 0) {
-      throw new Error("Enter a valid serving capacity.");
-    }
-  }
-
-  const previousStock = Number(product.stock) || 0;
-
-  Object.assign(product, {
-    name,
-    category,
-    productType,
-    price,
-    stock,
-    unit,
-    reorderLevel,
-    expiryDate,
-    status: stock > 0 ? "Available" : "Unavailable",
+// ---------- Inventory and Stock API ----------
+async function inventoryRequest(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      ...(options.headers || {}),
+    },
   });
 
-  if (wholeLechon) {
-    product.size = size;
-    product.kilos = kilos;
-    product.servingPax = servingPax;
-  } else {
-    delete product.size;
-    delete product.kilos;
-    delete product.servingPax;
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    // Keep the HTTP status authoritative for non-JSON responses.
   }
 
-  if (stock !== previousStock) {
-    STOCK_MOVEMENTS.unshift({
-      dateTime: new Date().toISOString(),
-      sku: product.sku,
-      movementType: "Adjustment",
-      quantity: stock - previousStock,
-      previousStock,
-      newStock: stock,
-      reason: "Adjustment",
-      notes: "Stock updated through Edit Product.",
-      staff: "Admin",
-    });
+  if (response.status === 401) {
+    window.location.reload();
   }
+  if (!response.ok) {
+    throw new Error(
+      (data && data.message) || `Inventory request failed (${response.status}).`,
+    );
+  }
+  if (!data || typeof data !== "object") {
+    throw new Error("The server returned an invalid inventory response.");
+  }
+
+  return data;
+}
+
+const numeric = (value) =>
+  value == null || value === "" ? value : Number(value);
+
+function mapProduct(product) {
+  const {
+    product_id: id,
+    category_id: categoryId,
+    category_name: category,
+    current_stock: stock,
+    reorder_level: reorderLevel,
+    product_type: productType,
+    expiry_date: expiryDate,
+    serving_pax: servingPax,
+    is_low_stock: isLowStock,
+    is_expired: isExpired,
+    ...rest
+  } = product;
 
   return {
-    ...product,
-    image: product.image || `assets/productsimage/${product.sku}.jpg`,
+    ...rest,
+    id: numeric(id),
+    categoryId: numeric(categoryId),
+    category,
+    price: numeric(product.price),
+    stock: numeric(stock),
+    reorderLevel: numeric(reorderLevel),
+    productType,
+    expiryDate,
+    kilos: numeric(product.kilos),
+    servingPax: numeric(servingPax),
+    isLowStock: isLowStock === true || Number(isLowStock) === 1,
+    isExpired: isExpired === true || Number(isExpired) === 1,
   };
 }
 
-// ---------- Archive Product ----------
-export async function archiveProduct(sku) {
-  const product = PRODUCTS.find(
-    (item) => item.sku === String(sku).trim().toUpperCase(),
+const MOVEMENT_TYPES = {
+  in: "Stock In",
+  out: "Stock Out",
+  adjustment: "Adjustment",
+};
+
+function movementRequestType(value) {
+  const type = String(value || "").trim().toLowerCase();
+  const label = Object.keys(MOVEMENT_TYPES).find(
+    (key) => MOVEMENT_TYPES[key].toLowerCase() === type,
   );
+  const normalized = label || type;
 
-  if (!product) throw new Error("Product not found.");
-
-  if (product.status === "Archived") {
-    throw new Error("This product is already archived.");
+  if (!Object.prototype.hasOwnProperty.call(MOVEMENT_TYPES, normalized)) {
+    throw new Error("Invalid movement type.");
   }
 
-  product.status = "Archived";
-  product.archivedAt = new Date().toISOString();
-
-  return { ...product };
+  return normalized;
 }
 
-// ---------- Restore Archived Product ----------
-export async function restoreProduct(sku) {
-  const product = PRODUCTS.find(
-    (item) => item.sku === String(sku).trim().toUpperCase(),
+function mapMovement(movement) {
+  const {
+    movement_id: id,
+    product_id: productId,
+    product_name: productName,
+    user_id: userId,
+    movement_type: movementType,
+    date_time: dateTime,
+    ...rest
+  } = movement;
+  const type = Object.entries(MOVEMENT_TYPES).find(
+    ([, label]) => label === movementType,
   );
 
-  if (!product) {
-    throw new Error("Product not found.");
+  if (!type) throw new Error("The server returned an invalid movement type.");
+
+  return {
+    ...rest,
+    id: numeric(id),
+    productId: numeric(productId),
+    productName,
+    userId: numeric(userId),
+    movementType: type[1],
+    movementTypeCode: type[0],
+    quantity: numeric(movement.quantity),
+    dateTime,
+  };
+}
+
+function mapProductResponse(data) {
+  return {
+    ...data,
+    id: numeric(data.product_id),
+    ...(data.product ? { product: mapProduct(data.product) } : {}),
+  };
+}
+
+export async function getInventory(search = "") {
+  const params = new URLSearchParams({ search: String(search || "") });
+  const data = await inventoryRequest(`/inventory?${params}`);
+
+  if (!Array.isArray(data.products)) {
+    throw new Error("The server returned an invalid inventory list.");
   }
 
-  if (product.status !== "Archived") {
-    throw new Error("This product is not archived.");
+  return data.products.map(mapProduct);
+}
+
+export async function getCatalog() {
+  const data = await inventoryRequest("/inventory/catalog");
+
+  if (!Array.isArray(data.products)) {
+    throw new Error("The server returned an invalid product catalog.");
   }
 
-  product.status = Number(product.stock) > 0 ? "Available" : "Unavailable";
+  return data.products.map(mapProduct);
+}
 
-  delete product.archivedAt;
+export async function getLowStock() {
+  const data = await inventoryRequest("/inventory/low-stock");
 
-  return { ...product };
+  if (!Array.isArray(data.low_stock) || !Array.isArray(data.expired)) {
+    throw new Error("The server returned invalid stock alerts.");
+  }
+
+  return {
+    ...data,
+    low_stock: data.low_stock.map(mapProduct),
+    expired: data.expired.map(mapProduct),
+  };
+}
+
+export async function getProduct(sku) {
+  const data = await inventoryRequest(
+    `/inventory/${encodeURIComponent(sku)}`,
+  );
+
+  if (!data.product || typeof data.product !== "object") {
+    throw new Error("The server returned an invalid product.");
+  }
+
+  return mapProduct(data.product);
+}
+
+export async function createProduct(productData) {
+  const body = {
+    sku: productData.sku,
+    name: productData.name,
+    category_id: productData.categoryId,
+    price: productData.price,
+    unit: productData.unit,
+    product_type: productData.productType,
+    current_stock: productData.stock,
+    reorder_level: productData.reorderLevel,
+    status: productData.status,
+    expiry_date: productData.expiryDate || null,
+  };
+
+  if (productData.category === "Whole Lechon") {
+    body.size = productData.size;
+    body.kilos = productData.kilos;
+    body.serving_pax = productData.servingPax;
+  }
+
+  const data = await inventoryRequest("/inventory", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  return mapProductResponse(data);
+}
+
+export async function updateProduct(sku, updates) {
+  const body = {};
+  if (updates.price !== undefined) body.price = updates.price;
+  if (updates.reorderLevel !== undefined) {
+    body.reorder_level = updates.reorderLevel;
+  }
+  if (updates.status !== undefined) body.status = updates.status;
+
+  const data = await inventoryRequest(
+    `/inventory/${encodeURIComponent(sku)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+
+  return mapProductResponse(data);
+}
+
+export async function archiveProduct(sku) {
+  const data = await inventoryRequest(
+    `/inventory/${encodeURIComponent(sku)}/archive`,
+    { method: "PATCH" },
+  );
+
+  return mapProductResponse(data);
+}
+
+export async function restoreProduct(sku) {
+  const data = await inventoryRequest(
+    `/inventory/${encodeURIComponent(sku)}/restore`,
+    { method: "PATCH" },
+  );
+
+  return mapProductResponse(data);
+}
+
+export async function logStockMovement({
+  sku,
+  movementType,
+  quantity,
+  reason,
+}) {
+  const data = await inventoryRequest("/stock/movements", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sku,
+      movement_type: movementRequestType(movementType),
+      quantity,
+      reason,
+    }),
+  });
+
+  return {
+    ...data,
+    ...(data.movement ? { movement: mapMovement(data.movement) } : {}),
+  };
+}
+
+export async function getStockMovements(filters = {}) {
+  const params = new URLSearchParams();
+  const movementType = filters.movementType || filters.movement_type;
+  const startDate = filters.startDate || filters.start_date;
+  const endDate = filters.endDate || filters.end_date;
+  if (filters.sku) params.set("sku", filters.sku);
+  if (movementType) {
+    params.set("movement_type", movementRequestType(movementType));
+  }
+  if (startDate) params.set("start_date", startDate);
+  if (endDate) params.set("end_date", endDate);
+  const query = params.toString();
+  const data = await inventoryRequest(
+    `/stock/movements${query ? `?${query}` : ""}`,
+  );
+
+  if (!Array.isArray(data.movements)) {
+    throw new Error("The server returned an invalid stock movement list.");
+  }
+
+  return data.movements.map(mapMovement);
+}
+
+export async function getCategories() {
+  const data = await inventoryRequest("/categories");
+
+  if (!Array.isArray(data.categories)) {
+    throw new Error("The server returned an invalid category list.");
+  }
+
+  return data.categories.map((category) => ({
+    id: numeric(category.category_id),
+    name: category.category_name,
+  }));
 }
 
 // ---------- Order and Transaction Numbers ----------
@@ -935,102 +995,6 @@ export async function voidRefundTransaction(
     ...transaction,
     items: transaction.items.map((item) => ({ ...item })),
   };
-}
-
-// ---------- Get Stock Movements ----------
-export async function getStockMovements() {
-  return STOCK_MOVEMENTS.map((movement) => {
-    const product = PRODUCTS.find((p) => p.sku === movement.sku);
-
-    return {
-      ...movement,
-      productName: product ? product.name : "Unknown Product",
-    };
-  });
-}
-
-// ---------- Manual Stock Movement ----------
-export function saveStockMovement({
-  sku,
-  movementType,
-  quantity,
-  reason,
-  notes = "",
-  staff = "Admin",
-}) {
-  const product = PRODUCTS.find((item) => item.sku === sku);
-
-  if (!product) throw new Error("Selected product was not found.");
-
-  if (product.status === "Archived") {
-    throw new Error("Archived products cannot have stock movements.");
-  }
-
-  const amount = Number(quantity);
-  const type = String(movementType || "").toLowerCase();
-  const cleanReason = String(reason || "").trim();
-
-  if (!["in", "out", "adjustment"].includes(type)) {
-    throw new Error("Please select a valid movement type.");
-  }
-
-  if (!Number.isFinite(amount) || amount < 0) {
-    throw new Error("Please enter a valid quantity.");
-  }
-
-  if (type !== "adjustment" && amount <= 0) {
-    throw new Error("Quantity must be greater than zero.");
-  }
-
-  if (!cleanReason) {
-    throw new Error("Please provide a reason for the movement.");
-  }
-
-  const previousStock = Number(product.stock) || 0;
-  let newStock = previousStock;
-
-  if (type === "in") {
-    newStock = previousStock + amount;
-  } else if (type === "out") {
-    if (amount > previousStock) {
-      throw new Error(
-        `Insufficient stock. Current stock is ${previousStock} ${product.unit || "unit(s)"}.`,
-      );
-    }
-
-    newStock = previousStock - amount;
-  } else {
-    newStock = amount;
-  }
-
-  const difference = newStock - previousStock;
-
-  if (difference === 0) {
-    throw new Error("The entered quantity does not change the current stock.");
-  }
-
-  product.stock = newStock;
-
-  if (newStock > 0 && product.status === "Unavailable") {
-    product.status = "Available";
-  } else if (newStock === 0) {
-    product.status = "Unavailable";
-  }
-
-  STOCK_MOVEMENTS.unshift({
-    dateTime: new Date().toISOString(),
-    sku: product.sku,
-    movementType:
-      type === "in" ? "Stock In" : type === "out" ? "Stock Out" : "Adjustment",
-    quantity: difference,
-    previousStock,
-    newStock,
-    reason: cleanReason,
-    notes: String(notes || "").trim(),
-    staff: String(staff || "Admin"),
-  });
-
-  return { sku: product.sku, previousStock, newStock, difference };
 }
 
 // ---------- Shifts: Mock Data ----------

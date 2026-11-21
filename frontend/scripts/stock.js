@@ -25,18 +25,19 @@ const formatDate = (dateTime) => {
 const formatQuantity = (quantity) => {
   const value = Number(quantity) || 0;
 
-  const formatted = Math.abs(value).toLocaleString("en-PH", {
+  return value.toLocaleString("en-PH", {
     maximumFractionDigits: 3,
   });
+};
 
-  if (value > 0) return `+${formatted}`;
-  if (value < 0) return `-${formatted}`;
-
-  return "0";
+const MOVEMENT_REASONS = {
+  in: ["Delivery"],
+  out: ["Spoilage", "Wastage", "Damaged", "Expired"],
+  adjustment: ["Count Correction"],
 };
 
 // ---------- CUSTOM STOCK NOTICE ----------
-function showStockNotice(title, message, type = "success", details = "") {
+function showStockNotice(title, message, type = "success") {
   const isError = type === "error";
 
   const modal = openModal({
@@ -65,21 +66,6 @@ function showStockNotice(title, message, type = "success", details = "") {
           ${escapeHTML(message)}
         </p>
 
-        ${details ? `
-          <div style="
-            text-align:left;
-            background:#f9fafb;
-            border:1px solid #eaecf0;
-            border-radius:8px;
-            padding:12px;
-            margin-top:15px;
-            font-size:13px;
-            line-height:1.8;
-          ">
-            ${details}
-          </div>
-        ` : ""}
-
         <div style="display:flex; justify-content:center; margin-top:20px;">
           <button type="button" class="btn btn--primary" id="stock-notice-ok">
             OK
@@ -96,7 +82,7 @@ function showStockNotice(title, message, type = "success", details = "") {
 }
 
 // ---------- RENDER STOCK MOVEMENT ----------
-export async function renderStock(container, user) {
+export async function renderStock(container) {
   container.innerHTML = `
     <h1 class="page-title">Stock Movement</h1>
     <p class="muted">Loading stock movement records...</p>
@@ -139,10 +125,6 @@ export async function renderStock(container, user) {
             escapeHTML(formatDate(movement.dateTime)),
         },
         {
-          key: "sku",
-          label: "SKU",
-        },
-        {
           key: "productName",
           label: "Product Name",
           render: (movement) =>
@@ -156,7 +138,7 @@ export async function renderStock(container, user) {
         },
         {
           key: "quantity",
-          label: "Quantity Change",
+          label: "Quantity",
           render: (movement) =>
             escapeHTML(formatQuantity(movement.quantity)),
         },
@@ -164,20 +146,14 @@ export async function renderStock(container, user) {
           key: "reason",
           label: "Reason",
         },
-        {
-          key: "staff",
-          label: "Staff",
-        },
       ],
 
       data: movements,
 
       searchKeys: [
-        "sku",
         "productName",
         "movementType",
         "reason",
-        "staff",
       ],
 
       pageSize: 8,
@@ -190,7 +166,7 @@ export async function renderStock(container, user) {
       .addEventListener("click", async () => {
         try {
           // Retrieve fresh product information whenever the modal opens.
-          const products = await api.getProducts();
+          const products = await api.getInventory();
 
           const activeProducts = products.filter(
             (product) => product.status !== "Archived"
@@ -275,26 +251,7 @@ export async function renderStock(container, user) {
                           class="input"
                           required>
                     <option value="">Select a reason</option>
-                    <option value="Delivery">Delivery</option>
-                    <option value="Expired">Expired</option>
-                    <option value="Spoilage">Spoilage</option>
-                    <option value="Damaged">Damaged</option>
-                    <option value="Correction">Correction</option>
-                    <option value="Other">Other</option>
                   </select>
-                </div>
-
-                <div class="field">
-                  <label for="movement-notes">
-                    Notes (Optional)
-                  </label>
-
-                  <textarea id="movement-notes"
-                            name="notes"
-                            class="input"
-                            rows="3"
-                            placeholder="Add additional details..."
-                            style="padding:0.75rem; min-height:90px; resize:vertical;"></textarea>
                 </div>
 
                 <p id="movement-error"
@@ -329,12 +286,21 @@ export async function renderStock(container, user) {
           const quantityInput = form.querySelector("#movement-quantity");
           const quantityLabel = form.querySelector("#quantity-label");
           const quantityHelp = form.querySelector("#quantity-help");
+          const reasonInput = form.querySelector("#movement-reason");
           const errorMessage = form.querySelector("#movement-error");
           const saveButton = form.querySelector("#save-stock-movement");
 
           // ---------- UPDATE QUANTITY INSTRUCTIONS ----------
           function updateQuantityInstructions() {
             const type = typeInput.value;
+            const reasons = MOVEMENT_REASONS[type];
+
+            reasonInput.innerHTML = `
+              <option value="">Select a reason</option>
+              ${reasons
+                .map((reason) => `<option value="${escapeHTML(reason)}">${escapeHTML(reason)}</option>`)
+                .join("")}
+            `;
 
             if (type === "in") {
               quantityLabel.textContent = "Quantity";
@@ -355,13 +321,13 @@ export async function renderStock(container, user) {
               quantityInput.placeholder = "Enter quantity to remove";
 
             } else {
-              quantityLabel.textContent = "New Total Stock";
+              quantityLabel.textContent = "Adjustment Quantity";
 
               quantityHelp.textContent =
-                "Enter the new total stock after adjustment. Enter 0 if there is no stock.";
+                "Enter a positive amount to add stock or a negative amount to remove stock.";
 
-              quantityInput.min = "0";
-              quantityInput.placeholder = "Enter new total stock";
+              quantityInput.removeAttribute("min");
+              quantityInput.placeholder = "Enter a signed quantity";
             }
 
             quantityInput.value = "";
@@ -401,43 +367,28 @@ export async function renderStock(container, user) {
               saveButton.textContent = "Saving...";
 
               // Wait for the stock movement result.
-              const result = await api.saveStockMovement({
+              await api.logStockMovement({
                 sku: selectedSku,
                 movementType: formData.get("movementType"),
                 quantity: formData.get("quantity"),
                 reason: formData.get("reason"),
-                notes: formData.get("notes"),
-                staff: user?.name || "Admin",
               });
 
-              // Retrieve and display updated movement history.
-              const updatedMovements = await api.getStockMovements();
-
-              table.setData(updatedMovements);
-
               modal.close();
+              try {
+                table.setData(await api.getStockMovements());
+              } catch (error) {
+                showStockNotice(
+                  "Movement Saved, History Not Refreshed",
+                  error.message || "Unable to refresh stock movement history.",
+                  "error",
+                );
+                return;
+              }
 
-              // Show updated stock information.
               showStockNotice(
                 "Stock Movement Saved",
-                "The stock movement was recorded successfully.",
-                "success",
-                `
-                  <div>
-                    <strong>Product:</strong>
-                    ${escapeHTML(selectedProduct?.name || result.sku)}
-                  </div>
-
-                  <div>
-                    <strong>Previous Stock:</strong>
-                    ${escapeHTML(result.previousStock)}
-                  </div>
-
-                  <div>
-                    <strong>New Stock:</strong>
-                    ${escapeHTML(result.newStock)}
-                  </div>
-                `
+                `Stock movement for ${selectedProduct?.name || selectedSku} recorded successfully.`,
               );
 
             } catch (error) {
@@ -470,8 +421,8 @@ export async function renderStock(container, user) {
 
     container.innerHTML = `
       <h1 class="page-title">Stock Movement</h1>
-      <p class="muted">
-        Unable to load stock movement records. Please try again.
+      <p class="alert" role="alert">
+        ${escapeHTML(error.message || "Unable to load stock movement records.")}
       </p>
     `;
   }

@@ -120,3 +120,18 @@ def archive_inventory_product(sku):
         "message": "Product archived successfully.",
         "product": archived,
     })
+
+
+@inventory_bp.route("/<sku>/restore", methods=["PATCH"])
+@role_required("Admin")
+def restore_inventory_product(sku):
+    product = inventory_service.get_product_by_sku(sku)
+    restored = inventory_service.restore_product(
+        product["product_id"],
+        session["user_id"],
+    )
+    return jsonify({
+        "success": True,
+        "message": "Product restored successfully.",
+        "product": restored,
+    })

@@ -1,4 +1,3 @@
-
 // inventory.js: displays product inventory for Cashier and Admin.
 
 import * as api from "./api.js";
@@ -8,8 +7,6 @@ import {
   escapeHTML,
   openModal,
 } from "./components.js";
-
-const FLAG_REASONS = ["delivery", "expired", "spoilage"];
 
 // ---------- CUSTOM NOTIFICATION ----------
 function showInventoryNotice(title, message, type = "success") {
@@ -60,32 +57,6 @@ function showInventoryNotice(title, message, type = "success") {
     .addEventListener("click", () => modal.close());
 }
 
-// ---------- BUILD STOCK FLAGS ----------
-function buildFlags(movements) {
-  const latest = {};
-
-  for (const movement of movements) {
-    const reason = String(movement.reason || "").toLowerCase();
-
-    if (!FLAG_REASONS.includes(reason)) continue;
-
-    const time = new Date(movement.dateTime).getTime();
-
-    if (!latest[movement.sku] || time > latest[movement.sku].time) {
-      latest[movement.sku] = { time, reason };
-    }
-  }
-
-  const flags = {};
-
-  for (const [sku, { reason }] of Object.entries(latest)) {
-    if (reason === "expired") flags[sku] = "Expired";
-    if (reason === "spoilage") flags[sku] = "Spoilage";
-  }
-
-  return flags;
-}
-
 // ---------- PRODUCT STATUS ----------
 function getProductStatus(product) {
   if (product.status === "Archived") return "Archived";
@@ -94,7 +65,9 @@ function getProductStatus(product) {
     return "Unavailable";
   }
 
-  if (Number(product.stock) <= Number(product.reorderLevel)) {
+  if (product.isExpired) return "Expired";
+
+  if (product.isLowStock) {
     return "Low stock";
   }
 
@@ -102,8 +75,9 @@ function getProductStatus(product) {
 }
 
 // ---------- PRODUCT FORM ----------
-function productFormContent(product = null) {
+function productFormContent(product = null, categories = []) {
   const editing = Boolean(product);
+  const selectedCategory = product?.categoryId ?? "";
 
   return `
     <form id="product-form">
@@ -123,25 +97,31 @@ function productFormContent(product = null) {
           <label for="product-name">Product Name *</label>
           <input class="input" id="product-name" name="name"
             value="${escapeHTML(product?.name || "")}"
-            type="text" placeholder="Enter product name" required />
+            type="text" placeholder="Enter product name"
+            ${editing ? "readonly" : "required"} />
         </div>
 
         <div class="field">
           <label for="product-category">Category *</label>
-          <select class="input" id="product-category" name="category" required>
+          <select class="input" id="product-category" name="categoryId"
+            ${editing ? "disabled" : "required"}>
             <option value="">Select category</option>
-            ${["Meals", "Snacks & Sides", "Desserts and Drinks", "Whole Lechon", "Raw Materials"]
-              .map((value) => `<option value="${escapeHTML(value)}" ${product?.category === value ? "selected" : ""}>${escapeHTML(value)}</option>`)
+            ${categories
+              .map(
+                ({ id, name }) =>
+                  `<option value="${escapeHTML(id)}" ${String(selectedCategory) === String(id) ? "selected" : ""}>${escapeHTML(name)}</option>`,
+              )
               .join("")}
           </select>
         </div>
 
         <div class="field">
           <label for="product-type">Product Type *</label>
-          <select class="input" id="product-type" name="productType" required>
+          <select class="input" id="product-type" name="productType"
+            ${editing ? "disabled" : "required"}>
             <option value="">Select product type</option>
-            <option value="Finished good" ${product?.productType === "Finished good" ? "selected" : ""}>Finished good</option>
-            <option value="Raw material" ${product?.productType === "Raw material" ? "selected" : ""}>Raw material</option>
+            <option value="Finished Good" ${product?.productType === "Finished Good" ? "selected" : ""}>Finished Good</option>
+            <option value="Raw Material" ${product?.productType === "Raw Material" ? "selected" : ""}>Raw Material</option>
           </select>
         </div>
 
@@ -158,31 +138,45 @@ function productFormContent(product = null) {
           <input class="input" id="product-stock" name="stock"
             type="number" min="0" step="0.01"
             value="${editing ? escapeHTML(product.stock) : ""}"
-            placeholder="0" required />
+            placeholder="0"
+            ${editing ? "readonly" : "required"} />
         </div>
 
         <div class="field">
           <label for="product-unit">Unit *</label>
-          <select class="input" id="product-unit" name="unit" required>
+          <select class="input" id="product-unit" name="unit"
+            ${editing ? "disabled" : "required"}>
             <option value="">Select unit</option>
-            ${["piece", "tray", "kg", "pack", "serving", "bottle"]
-              .map((value) => `<option value="${value}" ${product?.unit === value ? "selected" : ""}>${value === "kg" ? "Kilogram (kg)" : value.charAt(0).toUpperCase() + value.slice(1)}</option>`)
+            ${["piece", "kilogram", "tray"]
+              .map(
+                (value) =>
+                  `<option value="${value}" ${product?.unit === value ? "selected" : ""}>${value === "kilogram" ? "Kilogram" : value.charAt(0).toUpperCase() + value.slice(1)}</option>`,
+              )
               .join("")}
           </select>
         </div>
 
         <div class="field">
-          <label for="product-reorder">Reorder Level *</label>
+          <label for="product-reorder">Reorder Level</label>
           <input class="input" id="product-reorder" name="reorderLevel"
             type="number" min="0" step="0.01"
             value="${editing ? escapeHTML(product.reorderLevel) : "5"}"
             required />
         </div>
 
-        <div class="field" style="grid-column:1/-1;">
-          <label for="product-expiry">Expiry Date *</label>
+        <div class="field">
+          <label for="product-status">Status</label>
+          <select class="input" id="product-status" name="status" required>
+            <option value="Available" ${product?.status === "Available" || !product ? "selected" : ""}>Available</option>
+            <option value="Unavailable" ${product?.status === "Unavailable" ? "selected" : ""}>Unavailable</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="product-expiry">Expiry Date</label>
           <input class="input" id="product-expiry" name="expiryDate"
-            type="date" value="${escapeHTML(product?.expiryDate || "")}" />
+            type="date" value="${escapeHTML(product?.expiryDate || "")}"
+            ${editing ? "disabled" : ""} />
         </div>
 
       </div>
@@ -196,12 +190,9 @@ function productFormContent(product = null) {
 
           <div class="field">
             <label for="product-size">Size *</label>
-            <select class="input" id="product-size" name="size">
-              <option value="">Select size</option>
-              ${["Small", "Medium", "Large", "Extra Large"]
-                .map((value) => `<option value="${value}" ${product?.size === value ? "selected" : ""}>${value}</option>`)
-                .join("")}
-            </select>
+            <input class="input" id="product-size" name="size"
+              type="text" value="${escapeHTML(product?.size || "")}"
+              placeholder="Enter size" ${editing ? "readonly" : ""} />
           </div>
 
           <div class="field">
@@ -209,7 +200,7 @@ function productFormContent(product = null) {
             <input class="input" id="product-kilos" name="kilos"
               type="number" min="0.01" step="0.01"
               value="${product?.kilos != null ? escapeHTML(product.kilos) : ""}"
-              placeholder="20" />
+              placeholder="20" ${editing ? "readonly" : ""} />
           </div>
 
           <div class="field" style="grid-column:1/-1;">
@@ -217,7 +208,7 @@ function productFormContent(product = null) {
             <input class="input" id="product-pax" name="servingPax"
               type="number" min="1" step="1"
               value="${product?.servingPax != null ? escapeHTML(product.servingPax) : ""}"
-              placeholder="30" />
+              placeholder="30" ${editing ? "readonly" : ""} />
           </div>
 
         </div>
@@ -241,12 +232,12 @@ function productFormContent(product = null) {
 }
 
 // ---------- ADD / EDIT PRODUCT MODAL ----------
-function renderProductModal(table, product = null) {
+function renderProductModal(table, categories, product = null) {
   const editing = Boolean(product);
 
   const modal = openModal({
     title: editing ? "Edit Product" : "Add Product",
-    content: productFormContent(product),
+    content: productFormContent(product, categories),
     size: "medium",
   });
 
@@ -260,7 +251,10 @@ function renderProductModal(table, product = null) {
   const saveButton = form.querySelector("#save-product");
 
   function updateWholeLechonFields() {
-    const isWholeLechon = categoryInput.value === "Whole Lechon";
+    const selectedCategory = categories.find(
+      (item) => String(item.id) === categoryInput.value,
+    );
+    const isWholeLechon = selectedCategory?.name === "Whole Lechon";
 
     wholeFields.style.display = isWholeLechon ? "block" : "none";
     sizeInput.required = isWholeLechon;
@@ -286,40 +280,38 @@ function renderProductModal(table, product = null) {
 
     const formData = new FormData(form);
 
-    const productData = {
-      sku: formData.get("sku"),
-      name: formData.get("name"),
-      category: formData.get("category"),
-      productType: formData.get("productType"),
-      price: formData.get("price"),
-      stock: formData.get("stock"),
-      unit: formData.get("unit"),
-      reorderLevel: formData.get("reorderLevel"),
-      expiryDate: formData.get("expiryDate"),
-      size: formData.get("size"),
-      kilos: formData.get("kilos"),
-      servingPax: formData.get("servingPax"),
-    };
-
     try {
       if (editing) {
-        await api.updateProduct(product.sku, productData);
+        await api.updateProduct(product.sku, {
+          price: formData.get("price"),
+          reorderLevel: formData.get("reorderLevel"),
+          status: formData.get("status"),
+        });
       } else {
-        await api.addProduct(productData);
+        const categoryId = Number(formData.get("categoryId"));
+        const category = categories.find((item) => item.id === categoryId);
+        const productData = {
+          sku: formData.get("sku"),
+          name: formData.get("name"),
+          categoryId,
+          category: category?.name,
+          productType: formData.get("productType"),
+          price: formData.get("price"),
+          stock: formData.get("stock"),
+          unit: formData.get("unit"),
+          reorderLevel: formData.get("reorderLevel"),
+          status: formData.get("status"),
+          expiryDate: formData.get("expiryDate"),
+        };
+
+        if (category?.name === "Whole Lechon") {
+          productData.size = formData.get("size");
+          productData.kilos = formData.get("kilos");
+          productData.servingPax = formData.get("servingPax");
+        }
+
+        await api.createProduct(productData);
       }
-
-      const updatedProducts = await api.getProducts();
-      table.setData(updatedProducts);
-
-      modal.close();
-
-      showInventoryNotice(
-        editing ? "Product Updated" : "Product Added",
-        editing
-          ? "Product successfully updated."
-          : "Product successfully added to inventory."
-      );
-
     } catch (error) {
       errorMessage.textContent =
         error.message || "Unable to save product. Please try again.";
@@ -327,7 +319,28 @@ function renderProductModal(table, product = null) {
       errorMessage.style.display = "block";
       saveButton.disabled = false;
       saveButton.textContent = editing ? "Save Changes" : "Save Product";
+      return;
     }
+
+    modal.close();
+
+    try {
+      table.setData(await api.getInventory());
+    } catch (error) {
+      showInventoryNotice(
+        "Product Saved, Inventory Not Refreshed",
+        error.message || "Unable to refresh inventory.",
+        "error",
+      );
+      return;
+    }
+
+    showInventoryNotice(
+      editing ? "Product Updated" : "Product Added",
+      editing
+        ? "Product successfully updated."
+        : "Product successfully added to inventory.",
+    );
   });
 }
 
@@ -392,9 +405,11 @@ function renderArchiveConfirmation(table, product) {
   const confirmButton = modal.element.querySelector("#confirm-archive");
   const errorMessage = modal.element.querySelector("#archive-error");
 
-  modal.element.querySelector("#cancel-archive").addEventListener("click", () => {
-    modal.close();
-  });
+  modal.element
+    .querySelector("#cancel-archive")
+    .addEventListener("click", () => {
+      modal.close();
+    });
 
   confirmButton.addEventListener("click", async () => {
     confirmButton.disabled = true;
@@ -403,25 +418,131 @@ function renderArchiveConfirmation(table, product) {
 
     try {
       await api.archiveProduct(product.sku);
-
-      const updatedProducts = await api.getProducts();
-      table.setData(updatedProducts);
-
-      modal.close();
-
-      showInventoryNotice(
-        "Product Archived",
-        "Product successfully archived."
-      );
-
     } catch (error) {
-      errorMessage.textContent =
-        error.message || "Unable to archive product.";
+      errorMessage.textContent = error.message || "Unable to archive product.";
 
       errorMessage.style.display = "block";
       confirmButton.disabled = false;
-      confirmButton.innerHTML = '<span aria-hidden="true">&#128451;</span> Archive Product';
+      confirmButton.innerHTML =
+        '<span aria-hidden="true">&#128451;</span> Archive Product';
+      return;
     }
+
+    modal.close();
+
+    try {
+      table.setData(await api.getInventory());
+    } catch (error) {
+      showInventoryNotice(
+        "Product Archived, Inventory Not Refreshed",
+        error.message || "Unable to refresh inventory.",
+        "error",
+      );
+      return;
+    }
+
+    showInventoryNotice("Product Archived", "Product successfully archived.");
+  });
+}
+
+// ---------- RESTORE CONFIRMATION ----------
+function renderRestoreConfirmation(table, product) {
+  const content = `
+    <div style="padding-top:4px;">
+
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <div style="
+          width:42px;height:42px;display:flex;align-items:center;
+          justify-content:center;flex-shrink:0;border-radius:50%;
+          background:#e8f7ee;color:#16834b;font-size:20px;
+        ">
+          &#8634;
+        </div>
+
+        <div>
+          <strong style="display:block;font-size:15px;">Restore this product?</strong>
+          <span class="muted" style="font-size:13px;">Please review the product details below.</span>
+        </div>
+      </div>
+
+      <div style="
+        padding:14px;background:var(--surface, #f5f5f5);
+        border:1px solid var(--line);border-radius:10px;margin-bottom:14px;
+      ">
+        <strong style="display:block;">${escapeHTML(product.name)}</strong>
+        <span class="muted" style="font-size:13px;">
+          SKU: ${escapeHTML(product.sku)}
+        </span>
+      </div>
+
+      <p class="muted" style="font-size:13px;line-height:1.6;">
+        This product will be marked Available again. Its existing inventory record
+        and history will be retained.
+      </p>
+
+      <p id="restore-error" class="alert" role="alert"
+        style="display:none;margin-top:12px;"></p>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px;">
+        <button type="button" class="btn btn--soft" id="cancel-restore">
+          Cancel
+        </button>
+
+        <button type="button" id="confirm-restore" class="btn btn--primary">
+          <span aria-hidden="true">&#8634;</span>
+          Restore Product
+        </button>
+      </div>
+
+    </div>
+  `;
+
+  const modal = openModal({
+    title: "Confirm Restore",
+    content,
+    size: "small",
+  });
+
+  const confirmButton = modal.element.querySelector("#confirm-restore");
+  const errorMessage = modal.element.querySelector("#restore-error");
+
+  modal.element
+    .querySelector("#cancel-restore")
+    .addEventListener("click", () => {
+      modal.close();
+    });
+
+  confirmButton.addEventListener("click", async () => {
+    confirmButton.disabled = true;
+    confirmButton.textContent = "Restoring...";
+    errorMessage.style.display = "none";
+
+    try {
+      await api.restoreProduct(product.sku);
+    } catch (error) {
+      errorMessage.textContent = error.message || "Unable to restore product.";
+
+      errorMessage.style.display = "block";
+      confirmButton.disabled = false;
+      confirmButton.innerHTML =
+        '<span aria-hidden="true">&#8634;</span> Restore Product';
+      return;
+    }
+
+    modal.close();
+
+    try {
+      table.setData(await api.getInventory());
+    } catch (error) {
+      showInventoryNotice(
+        "Product Restored, Inventory Not Refreshed",
+        error.message || "Unable to refresh inventory.",
+        "error",
+      );
+      return;
+    }
+
+    showInventoryNotice("Product Restored", "Product successfully restored.");
   });
 }
 
@@ -433,13 +554,26 @@ export async function renderInventory(container, user) {
     <p>Loading inventory...</p>
   `;
 
-  try {
-    const [products, movements] = await Promise.all([
-      api.getProducts(),
-      api.getStockMovements(),
+  async function loadProducts() {
+    const [products, stockAlerts] = await Promise.all([
+      api.getInventory(),
+      api.getLowStock(),
     ]);
+    const lowStockSkus = new Set(stockAlerts.low_stock.map((item) => item.sku));
+    const expiredSkus = new Set(stockAlerts.expired.map((item) => item.sku));
 
-    const flags = buildFlags(movements);
+    return products.map((product) => ({
+      ...product,
+      isLowStock: lowStockSkus.has(product.sku),
+      isExpired: expiredSkus.has(product.sku),
+    }));
+  }
+
+  try {
+    const [products, categories] = await Promise.all([
+      loadProducts(),
+      user?.role === "Admin" ? api.getCategories() : Promise.resolve([]),
+    ]);
 
     container.innerHTML = `
       <div class="page-header"
@@ -512,7 +646,7 @@ export async function renderInventory(container, user) {
           product.expiryDate
             ? new Date(product.expiryDate + "T00:00:00").toLocaleDateString(
                 "en-PH",
-                { year: "numeric", month: "short", day: "numeric" }
+                { year: "numeric", month: "short", day: "numeric" },
               )
             : "—",
       },
@@ -525,6 +659,10 @@ export async function renderInventory(container, user) {
 
           if (status === "Low stock") {
             return `<span class="status-chip status-warning">Low stock</span>`;
+          }
+
+          if (status === "Expired") {
+            return `<span class="status-chip status-inactive">Expired</span>`;
           }
 
           return statusChip(status);
@@ -541,15 +679,20 @@ export async function renderInventory(container, user) {
         render: (product) => {
           if (getProductStatus(product) === "Archived") {
             return `
-            <button
-              type="button"
-              class="btn btn-primary inventory-restore"
-              data-sku="${escapeHTML(product.sku)}"
-            >
-              Restore
-           </button>
-        `;
-      }
+              <div class="inventory-actions">
+                <button
+                  type="button"
+                  class="inventory-action-btn inventory-restore"
+                  data-sku="${escapeHTML(product.sku)}"
+                  aria-label="Restore ${escapeHTML(product.name)}"
+                  title="Restore product"
+                >
+                  <span aria-hidden="true">&#8634;</span>
+                  Restore
+                </button>
+              </div>
+            `;
+          }
 
           return `
             <div class="inventory-actions">
@@ -599,6 +742,11 @@ export async function renderInventory(container, user) {
           predicate: (product) => getProductStatus(product) === "Low stock",
         },
         {
+          label: "Expired",
+          value: "expired",
+          predicate: (product) => getProductStatus(product) === "Expired",
+        },
+        {
           label: "Unavailable",
           value: "unavailable",
           predicate: (product) => getProductStatus(product) === "Unavailable",
@@ -619,101 +767,69 @@ export async function renderInventory(container, user) {
 
     if (addButton && user?.role === "Admin") {
       addButton.addEventListener("click", () => {
-        renderProductModal(table);
+        renderProductModal(table, categories);
       });
     }
 
-// ---------- EDIT, ARCHIVE, AND RESTORE ----------
-tableContainer.addEventListener("click", async (event) => {
-  const target = event.target;
+    tableContainer.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
 
-  if (!(target instanceof Element)) return;
+      const editButton = target.closest(".inventory-edit");
+      const archiveButton = target.closest(".inventory-archive");
+      const restoreButton = target.closest(".inventory-restore");
+      const clickedButton = editButton || archiveButton || restoreButton;
+      if (!clickedButton || clickedButton.disabled) return;
 
-  const editButton = target.closest(".inventory-edit");
-  const archiveButton = target.closest(".inventory-archive");
-  const restoreButton = target.closest(".inventory-restore");
+      const sku = clickedButton.dataset.sku;
+      if (!sku) return;
+      clickedButton.disabled = true;
 
-  if (!editButton && !archiveButton && !restoreButton) return;
+      try {
+        const product = await api.getProduct(sku);
 
-  const clickedButton = editButton || archiveButton || restoreButton;
-  const sku = clickedButton.dataset.sku;
+        if (restoreButton) {
+          if (product.status !== "Archived") {
+            showInventoryNotice(
+              "Product No Longer Archived",
+              "This product is no longer archived.",
+              "error",
+            );
+            return;
+          }
 
-  if (!sku || clickedButton.disabled) return;
+          renderRestoreConfirmation(table, product);
+          return;
+        }
 
-  clickedButton.disabled = true;
+        if (product.status === "Archived") {
+          showInventoryNotice(
+            "Product Already Archived",
+            "This product is already archived.",
+            "error",
+          );
+          return;
+        }
 
-  try {
-    const latestProducts = await api.getProducts();
-
-    const product = latestProducts.find(
-      (item) => String(item.sku).toUpperCase() === sku.toUpperCase()
-    );
-
-    if (!product) {
-      showInventoryNotice(
-        "Product Not Found",
-        "Product could not be found. Please refresh the inventory.",
-        "error"
-      );
-      return;
-    }
-
-    // ---------- RESTORE PRODUCT ----------
-    if (restoreButton) {
-      if (product.status !== "Archived") {
+        if (editButton) {
+          renderProductModal(table, categories, product);
+        } else {
+          renderArchiveConfirmation(table, product);
+        }
+      } catch (error) {
         showInventoryNotice(
-          "Product Not Archived",
-          "This product is not archived.",
-          "error"
+          "Unable to Process Product",
+          error.message || "Unable to process product action.",
+          "error",
         );
-        return;
+      } finally {
+        clickedButton.disabled = false;
       }
-
-      await api.restoreProduct(product.sku);
-
-      const updatedProducts = await api.getProducts();
-      table.setData(updatedProducts);
-
-      showInventoryNotice(
-        "Product Restored",
-        "Product successfully restored to inventory."
-      );
-
-      return;
-    }
-
-    // Prevent editing or archiving an archived product.
-    if (product.status === "Archived") {
-      showInventoryNotice(
-        "Product Already Archived",
-        "This product is already archived.",
-        "error"
-      );
-      return;
-    }
-
-    if (editButton) {
-      renderProductModal(table, product);
-    } else if (archiveButton) {
-      renderArchiveConfirmation(table, product);
-    }
-
-  } catch (error) {
-    showInventoryNotice(
-      "Unable to Process Product",
-      error.message || "Unable to process product action.",
-      "error"
-    );
-
-  } finally {
-    clickedButton.disabled = false;
-  }
-});
-
+    });
   } catch (error) {
     container.innerHTML = `
       <h1 class="page-title">Inventory</h1>
-      <p class="muted">Unable to load inventory. Please try again.</p>
+      <p class="alert" role="alert">${escapeHTML(error.message || "Unable to load inventory.")}</p>
     `;
 
     console.error("Inventory loading error:", error);

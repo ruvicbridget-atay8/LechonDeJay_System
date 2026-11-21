@@ -821,6 +821,18 @@
   color: #8f0710;
 }
 
+.inventory-restore {
+  background: #f0faf4;
+  border-color: #a8d7ba;
+  color: #16733e;
+}
+
+.inventory-restore:hover:not(:disabled) {
+  background: #e2f5e9;
+  border-color: #16834b;
+  color: #126338;
+}
+
 .inventory-archived-label {
   display: inline-flex;
   align-items: center;

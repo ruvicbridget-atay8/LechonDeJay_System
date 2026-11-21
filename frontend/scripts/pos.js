@@ -34,10 +34,6 @@ const esc = (s) =>
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
-// Only Available finished goods are sold at the counter (FR-04, FR-28).
-const sellable = (p) =>
-  p.status === "Available" && p.productType === "Finished good";
-
 /* ---------- Order state (kept while the user moves between pages) ---------- */
 const emptyCheckout = () => ({
   discountType: "Regular",
@@ -51,7 +47,6 @@ const emptyCheckout = () => ({
 
 let cart = []; // { id, sku, name, price, qty, isAddon, parentId }
 let orderType = "Dine In";
-let lastParentId = null; // the last main item added: add-ons attach to it
 let lineCounter = 1;
 let checkout = emptyCheckout();
 let discountTypes = [];
@@ -125,7 +120,6 @@ export function buildOrder(user) {
 export function resetOrder() {
   cart = [];
   orderType = "Dine In";
-  lastParentId = null;
   checkout = emptyCheckout();
 }
 // Popup shown after the order is saved. onClose runs when the Cashier taps OK.
@@ -152,11 +146,20 @@ function showOrderPlaced({ orderNo, total, change }, onClose) {
 }
 
 export async function renderPos(container, user) {
-  const [allProducts, types] = await Promise.all([
-    api.getProducts(),
-    api.getDiscountTypes(),
-  ]);
-  const products = allProducts.filter(sellable);
+  let products;
+  let types;
+  try {
+    [products, types] = await Promise.all([
+      api.getCatalog(),
+      api.getDiscountTypes(),
+    ]);
+  } catch (error) {
+    container.innerHTML = `
+      <h1 class="page-title">POS</h1>
+      <p class="alert" role="alert">${esc(error.message || "Unable to load the product catalog.")}</p>
+    `;
+    return;
+  }
   discountTypes = types.filter((t) => t.active);
 
   const { transactionNo, orderNo } = api.peekOrderNumbers();
@@ -280,20 +283,6 @@ export async function renderPos(container, user) {
   let category = "All";
   let query = "";
 
-  // If an image file is missing, show the gray placeholder instead.
-  grid.addEventListener(
-    "error",
-    (e) => {
-      if (e.target.tagName !== "IMG") return;
-      console.warn("Image not found:", e.target.src); // <-- shows the exact URL
-      const placeholder = document.createElement("div");
-      placeholder.className = "product-img";
-      placeholder.innerHTML = '<i class="bi bi-image"></i>';
-      e.target.replaceWith(placeholder);
-    },
-    true,
-  );
-
   /* ---------- Catalog ---------- */
   function drawCatalog() {
     const q = query.trim().toLowerCase();
@@ -315,11 +304,7 @@ export async function renderPos(container, user) {
       .map(
         (p) => `
       <button class="product" type="button" data-sku="${esc(p.sku)}">
-        ${
-          p.image
-            ? `<img class="product-img" src="${esc(p.image)}" alt="" />`
-            : `<div class="product-img"><i class="bi bi-image"></i></div>`
-        }
+        <div class="product-img"><i class="bi bi-image"></i></div>
         <div class="product-info">
           <span class="product-name">${esc(p.name)}</span>
           <span class="product-price">${peso(p.price)}</span>
@@ -338,52 +323,25 @@ export async function renderPos(container, user) {
   function addToCart(product) {
     showNotice("");
 
-    if (product.isAddon) {
-      // An add-on is its own line, linked to the main item it belongs to (FR-17).
-      if (!lastParentId || !cart.some((l) => l.id === lastParentId)) {
-        showNotice("Add a main item first, then add the add-on.");
-        return;
-      }
-      const same = cart.find(
-        (l) => l.sku === product.sku && l.parentId === lastParentId,
-      );
-      if (same) same.qty += 1;
-      else
-        cart.push({
-          id: lineCounter++,
-          sku: product.sku,
-          name: product.name,
-          price: product.price,
-          qty: 1,
-          isAddon: true,
-          parentId: lastParentId,
-        });
+    const same = cart.find((line) => line.sku === product.sku);
+    if (same) {
+      same.qty += 1;
     } else {
-      const same = cart.find((l) => l.sku === product.sku && !l.isAddon);
-      if (same) {
-        same.qty += 1;
-        lastParentId = same.id;
-      } else {
-        const line = {
-          id: lineCounter++,
-          sku: product.sku,
-          name: product.name,
-          price: product.price,
-          qty: 1,
-          isAddon: false,
-          parentId: null,
-        };
-        cart.push(line);
-        lastParentId = line.id;
-      }
+      cart.push({
+        id: lineCounter++,
+        sku: product.sku,
+        name: product.name,
+        price: product.price,
+        qty: 1,
+        isAddon: false,
+        parentId: null,
+      });
     }
     drawCart();
   }
 
   function removeLine(id) {
-    // Removing a main item also removes its add-ons.
-    cart = cart.filter((l) => l.id !== id && l.parentId !== id);
-    if (lastParentId === id) lastParentId = null;
+    cart = cart.filter((line) => line.id !== id);
     showNotice("");
     drawCart();
   }
@@ -397,9 +355,9 @@ export async function renderPos(container, user) {
 
   function lineHtml(l) {
     return `
-      <div class="cart-line${l.isAddon ? " is-addon" : ""}" data-id="${l.id}">
+      <div class="cart-line" data-id="${l.id}">
         <div class="cart-line-top">
-          <span class="cart-line-name">${l.isAddon ? "+ " : ""}${esc(l.name)}</span>
+          <span class="cart-line-name">${esc(l.name)}</span>
           <button class="cart-del" type="button" data-act="del" aria-label="Remove ${esc(l.name)}">
             <i class="bi bi-trash"></i>
           </button>
@@ -419,14 +377,7 @@ export async function renderPos(container, user) {
     if (!cart.length) {
       linesBox.innerHTML = `<p class="cart-empty">No items yet. Tap a product to start.</p>`;
     } else {
-      // Each main item is followed by its add-ons.
-      const ordered = [];
-      cart
-        .filter((l) => !l.isAddon)
-        .forEach((main) => {
-          ordered.push(main, ...cart.filter((l) => l.parentId === main.id));
-        });
-      linesBox.innerHTML = ordered.map(lineHtml).join("");
+      linesBox.innerHTML = cart.map(lineHtml).join("");
     }
     drawTotals();
   }
