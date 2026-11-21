@@ -82,10 +82,13 @@ def edit_inventory_product(sku):
             "success": False,
             "message": "A non-empty JSON object is required.",
         }), 400
-    if set(data) - {"price", "reorder_level", "status"}:
+    if set(data) - {"price", "reorder_level", "status", "is_addon"}:
         return jsonify({
             "success": False,
-            "message": "Only price, reorder_level, and status can be edited here.",
+            "message": (
+                "Only price, reorder_level, status, and is_addon "
+                "can be edited here."
+            ),
         }), 400
     if "status" in data and (
         not isinstance(data["status"], str)

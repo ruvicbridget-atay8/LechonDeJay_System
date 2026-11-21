@@ -34,8 +34,8 @@ def test_inventory_read_endpoints_allow_cashier_and_forward_queries(monkeypatch)
 
     account = _account("Cashier")
     monkeypatch.setattr(auth_service, "_get_account", lambda _: account)
-    search = Mock(return_value=[{"sku": "RM-001"}])
-    catalog = Mock(return_value=[{"sku": "MEAL-001"}])
+    search = Mock(return_value=[{"sku": "RM-001", "is_addon": False}])
+    catalog = Mock(return_value=[{"sku": "MEAL-001", "is_addon": True}])
     low_stock = Mock(return_value=[{"sku": "RM-002", "is_low_stock": True}])
     expired = Mock(return_value=[{"sku": "RM-003", "is_expired": True}])
     by_sku = Mock(return_value={
@@ -55,11 +55,13 @@ def test_inventory_read_endpoints_allow_cashier_and_forward_queries(monkeypatch)
 
     response = client.get("/inventory?search=rice")
     assert response.status_code == 200
-    assert response.get_json()["products"] == [{"sku": "RM-001"}]
+    assert response.get_json()["products"] == [
+        {"sku": "RM-001", "is_addon": False}
+    ]
     search.assert_called_once_with("rice")
 
     assert client.get("/inventory/catalog").get_json()["products"] == [
-        {"sku": "MEAL-001"}
+        {"sku": "MEAL-001", "is_addon": True}
     ]
     flags = client.get("/inventory/low-stock").get_json()
     assert flags["low_stock"] == [{"sku": "RM-002", "is_low_stock": True}]
@@ -110,13 +112,13 @@ def test_inventory_mutations_are_admin_only(monkeypatch):
 
     response = client.put(
         "/inventory/MEAL-001",
-        json={"price": "120.00", "status": "Available"},
+        json={"price": "120.00", "status": "Available", "is_addon": True},
     )
     assert response.status_code == 200
     update_product.assert_called_once_with(
         15,
         7,
-        {"price": "120.00", "status": "Available"},
+        {"price": "120.00", "status": "Available", "is_addon": True},
     )
 
     response = client.patch("/inventory/MEAL-001/archive")
@@ -135,6 +137,8 @@ def test_stock_movement_endpoints_are_admin_only_and_filter_history(monkeypatch)
     log_movement = Mock(return_value={"movement_id": 31})
     list_movements = Mock(return_value=[{
         "movement_id": 31,
+        "sku": "MEAL-001",
+        "staff_name": "Test User",
         "date_time": datetime(2026, 11, 19, 3, 0),
     }])
     monkeypatch.setattr(stock.inventory_service, "get_product_by_sku", get_product)
@@ -171,6 +175,8 @@ def test_stock_movement_endpoints_are_admin_only_and_filter_history(monkeypatch)
     )
     assert response.status_code == 200
     assert response.get_json()["movements"][0]["date_time"] == "2026-11-19 03:00:00"
+    assert response.get_json()["movements"][0]["sku"] == "MEAL-001"
+    assert response.get_json()["movements"][0]["staff_name"] == "Test User"
     list_movements.assert_called_once_with(
         sku="MEAL-001",
         movement_type="Adjustment",

@@ -5,5 +5,5 @@ __pycache__/
 venv/
 .venv/
 .pytest_cache/
-database/
-/database/seed_data.sql
+database/*
+database/schema.sql
