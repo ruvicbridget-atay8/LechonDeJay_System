@@ -127,7 +127,7 @@ export function renderAccounts(container, currentUser) {
           type="search"
           id="account-search"
           class="input accounts-search"
-          placeholder="Search by name, username, contact, or role..."
+          placeholder="Search by name, username, or role..."
           aria-label="Search accounts"
         />
       </div>
@@ -180,23 +180,35 @@ export function renderAccounts(container, currentUser) {
   const activeBody = container.querySelector("#active-accounts-body");
   const inactiveBody = container.querySelector("#inactive-accounts-body");
   const searchInput = container.querySelector("#account-search");
+  let accountLoadVersion = 0;
+  let searchTimeout;
 
   // ---------- LOAD ACCOUNTS ----------
   async function loadAccounts() {
+    const requestVersion = ++accountLoadVersion;
+
     try {
-      const users = await api.getUsers();
-      displayAccounts(users, searchInput.value);
+      const { users } = await api.getUsers(searchInput.value);
+      if (requestVersion !== accountLoadVersion) return;
+      displayAccounts(users);
     } catch (error) {
+      if (requestVersion !== accountLoadVersion) return;
+
       console.error("Unable to load accounts:", error);
 
       const failed = `
               <tr>
                 <td colspan="6" style="text-align:center;padding:25px;">
-                 Unable to load accounts.
+                 ${escapeHTML(error.message || "Unable to load accounts.")}
                 </td>
               </tr>`;
       activeBody.innerHTML = failed;
       inactiveBody.innerHTML = failed;
+      showAccountNotice(
+        "Unable to Load Accounts",
+        error.message || "Unable to load accounts.",
+        "error",
+      );
     }
   }
 
@@ -218,23 +230,18 @@ export function renderAccounts(container, currentUser) {
         </td>
         <td>
           <div class="account-action-buttons">
-            <button
-              class="btn btn--soft edit-account-btn"
-              data-id="${escapeHTML(user.id)}"
-              type="button"
-            >
-              <i class="bi bi-pencil"></i>
-              Edit
-            </button>
-
-            <button
-              class="btn ${user.active ? "btn--soft" : "btn--primary"} toggle-account-btn"
-              data-id="${escapeHTML(user.id)}"
-              type="button"
-              ${isCurrentUser ? "disabled title='You cannot deactivate your own account.'" : ""}
-            >
-              ${user.active ? "Deactivate" : "Activate"}
-            </button>
+            ${
+              user.active
+                ? `<button
+                    class="btn btn--soft deactivate-account-btn"
+                    data-id="${escapeHTML(user.id)}"
+                    type="button"
+                    ${isCurrentUser ? "disabled title='You cannot deactivate your own account.'" : ""}
+                  >
+                    Deactivate
+                  </button>`
+                : "—"
+            }
           </div>
         </td>
       </tr>
@@ -253,41 +260,20 @@ export function renderAccounts(container, currentUser) {
       `;
   }
 
-  function displayAccounts(users, searchTerm = "") {
-    const term = searchTerm.toLowerCase().trim();
-
-    const filteredUsers = users.filter((user) => {
-      return (
-        String(user.name || "")
-          .toLowerCase()
-          .includes(term) ||
-        String(user.username || "")
-          .toLowerCase()
-          .includes(term) ||
-        String(user.contactNumber || "")
-          .toLowerCase()
-          .includes(term) ||
-        String(user.role || "")
-          .toLowerCase()
-          .includes(term)
-      );
-    });
-
-    const active = filteredUsers.filter((user) => user.active);
-    const inactive = filteredUsers.filter((user) => !user.active);
+  function displayAccounts(users) {
+    const active = users.filter((user) => user.active);
+    const inactive = users.filter((user) => !user.active);
 
     fillTable(
       activeBody,
       active,
-      term ? "No active accounts match your search." : "No active accounts.",
+      "No active accounts.",
     );
 
     fillTable(
       inactiveBody,
       inactive,
-      term
-        ? "No deactivated accounts match your search."
-        : "No deactivated accounts.",
+      "No deactivated accounts.",
     );
 
     container.querySelector("#active-count").textContent = active.length;
@@ -295,7 +281,11 @@ export function renderAccounts(container, currentUser) {
   }
 
   // ---------- SEARCH ----------
-  searchInput.addEventListener("input", loadAccounts);
+  searchInput.addEventListener("input", () => {
+    accountLoadVersion += 1;
+    window.clearTimeout(searchTimeout);
+    searchTimeout = window.setTimeout(loadAccounts, 250);
+  });
 
   // ---------- ADD ACCOUNT ----------
   container.querySelector("#add-account-btn").addEventListener("click", () => {
@@ -313,45 +303,14 @@ export function renderAccounts(container, currentUser) {
 
       if (!target) return;
 
-      const editButton = target.closest(".edit-account-btn");
-      const toggleButton = target.closest(".toggle-account-btn");
+      const deactivateButton = target.closest(".deactivate-account-btn");
 
-      // EDIT ACCOUNT
-      if (editButton) {
+      // DEACTIVATE ACCOUNT
+      if (deactivateButton) {
         try {
-          const users = await api.getUsers();
-
-          const user = users.find(
-            (item) => String(item.id) === editButton.dataset.id,
-          );
-
-          if (user) {
-            showAccountForm(user);
-          } else {
-            showAccountNotice(
-              "Account Not Found",
-              "The selected account could not be found.",
-              "error",
-            );
-          }
-        } catch (error) {
-          showAccountNotice(
-            "Unable to Open Account",
-            error.message || "Unable to retrieve account information.",
-            "error",
-          );
-        }
-
-        return;
-      }
-
-      // ACTIVATE / DEACTIVATE ACCOUNT
-      if (toggleButton) {
-        try {
-          const users = await api.getUsers();
-
-          const user = users.find(
-            (item) => String(item.id) === toggleButton.dataset.id,
+          const { users } = await api.getUsers(searchInput.value);
+          const user = users.find((item) =>
+            String(item.id) === deactivateButton.dataset.id,
           );
 
           if (!user) {
@@ -373,21 +332,18 @@ export function renderAccounts(container, currentUser) {
             return;
           }
 
-          const action = user.active ? "deactivate" : "activate";
-          const newStatus = !user.active;
-
           showAccountConfirmation(
-            `${user.active ? "Deactivate" : "Activate"} Account`,
-            `Are you sure you want to ${action} ${user.name}'s account?`,
-            user.active ? "Deactivate" : "Activate",
+            "Deactivate Account",
+            `Are you sure you want to deactivate ${user.name}'s account?`,
+            "Deactivate",
             async () => {
-              await api.updateUserStatus(user.id, newStatus);
+              await api.deactivateUser(user.id);
 
               await loadAccounts();
 
               showAccountNotice(
-                "Account Updated",
-                `${user.name}'s account has been ${newStatus ? "activated" : "deactivated"} successfully.`,
+                "Account Deactivated",
+                `${user.name}'s account has been deactivated successfully.`,
               );
             },
           );
@@ -402,9 +358,7 @@ export function renderAccounts(container, currentUser) {
     });
 
   // ---------- ACCOUNT FORM ----------
-  function showAccountForm(user = null) {
-    const editing = Boolean(user);
-
+  function showAccountForm() {
     const modal = document.createElement("div");
     modal.className = "shared-modal-overlay";
 
@@ -417,15 +371,11 @@ export function renderAccounts(container, currentUser) {
         <div class="shared-modal-header">
           <div>
             <h2 id="account-modal-title">
-              ${editing ? "Edit Account" : "Create New Account"}
+              Create New Account
             </h2>
 
             <p style="margin-top:5px;color:#667085;font-size:13px;">
-              ${
-                editing
-                  ? "Update the account information below."
-                  : "Fill in the details to register a new user."
-              }
+              Fill in the details to register a new user.
             </p>
           </div>
 
@@ -468,7 +418,6 @@ export function renderAccounts(container, currentUser) {
                   class="form-control"
                   type="text"
                   placeholder="Enter full name"
-                  value="${escapeHTML(user?.name || "")}"
                   required
                 />
               </div>
@@ -481,7 +430,6 @@ export function renderAccounts(container, currentUser) {
                   class="form-control"
                   type="text"
                   placeholder="Enter username"
-                  value="${escapeHTML(user?.username || "")}"
                   required
                 />
               </div>
@@ -496,7 +444,6 @@ export function renderAccounts(container, currentUser) {
                type="tel"
                inputmode="tel"
                placeholder="e.g. 0917 123 4567"
-               value="${escapeHTML(user?.contactNumber || "")}"
                required
               />
           </div>
@@ -511,19 +458,9 @@ export function renderAccounts(container, currentUser) {
                   name="password"
                   class="form-control"
                   type="password"
-                  placeholder="${
-                    editing
-                      ? "Leave blank to keep current password"
-                      : "Enter password"
-                  }"
-                  ${editing ? "" : "required"}
+                  placeholder="Enter password"
+                  required
                 />
-
-                ${
-                  editing
-                    ? `<small>Leave blank if you do not want to change the password.</small>`
-                    : ""
-                }
               </div>
 
               <div class="account-form-group">
@@ -534,13 +471,8 @@ export function renderAccounts(container, currentUser) {
                   class="form-control"
                   required
                 >
-                  <option value="Cashier" ${user?.role === "Cashier" ? "selected" : ""}>
-                    Cashier
-                  </option>
-
-                  <option value="Admin" ${user?.role === "Admin" ? "selected" : ""}>
-                    Admin
-                  </option>
+                  <option value="Cashier">Cashier</option>
+                  <option value="Admin">Admin</option>
                 </select>
               </div>
             </div>
@@ -562,7 +494,7 @@ export function renderAccounts(container, currentUser) {
               id="save-account-btn"
             >
               <i class="bi bi-check-lg"></i>
-              ${editing ? "Save Changes" : "Create Account"}
+              Create Account
             </button>
           </div>
         </form>
@@ -613,21 +545,15 @@ export function renderAccounts(container, currentUser) {
         saveButton.disabled = true;
         saveButton.textContent = "Saving...";
 
-        if (editing) {
-          await api.updateUser(user.id, data);
-        } else {
-          await api.addUser(data);
-        }
+        await api.createUser(data);
 
         closeModal();
 
         await loadAccounts();
 
         showAccountNotice(
-          editing ? "Account Updated" : "Account Created",
-          editing
-            ? "The account information has been updated successfully."
-            : "The new account has been created successfully.",
+          "Account Created",
+          "The new account has been created successfully.",
         );
       } catch (error) {
         // Keep the form open and preserve entered values.
@@ -638,7 +564,7 @@ export function renderAccounts(container, currentUser) {
         saveButton.disabled = false;
         saveButton.innerHTML = `
           <i class="bi bi-check-lg"></i>
-          ${editing ? "Save Changes" : "Create Account"}
+          Create Account
         `;
       }
     });

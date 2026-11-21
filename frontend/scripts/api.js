@@ -1,8 +1,7 @@
-// api.js: session authentication plus mock application data.
+// api.js: session authentication plus application data.
 const readData = (id) =>
   JSON.parse(document.getElementById(id)?.textContent || "[]");
 
-const USERS = readData("data-users");
 const API_BASE_URL = "http://127.0.0.1:5000";
 let memorySession = null;
 
@@ -106,106 +105,96 @@ export async function logout() {
 }
 
 // ---------- Account Management ----------
-export async function getUsers() {
-  return USERS.map(({ password, ...user }) => ({
-    ...user,
-    active: user.active !== false,
-  }));
-}
+async function usersRequest(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      ...(options.headers || {}),
+    },
+  });
 
-function cleanContact(value) {
-  const contact = String(value || "").trim();
-  const digits = contact.replace(/\D/g, "");
-  if (
-    !/^[0-9+\-\s()]+$/.test(contact) ||
-    digits.length < 7 ||
-    digits.length > 15
-  ) {
-    throw new Error("Enter a valid contact number.");
-  }
-  return contact;
-}
-
-export async function addUser(userData) {
-  const name = String(userData.name || "").trim();
-  const username = String(userData.username || "")
-    .trim()
-    .toLowerCase();
-  const password = String(userData.password || "");
-  const role = userData.role;
-  const contactNumber = cleanContact(userData.contactNumber);
-  if (!name || !username || !password) {
-    throw new Error("Please complete all required fields.");
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    // Preserve the HTTP error when the backend returns a non-JSON response.
   }
 
-  if (!["Admin", "Cashier"].includes(role)) {
-    throw new Error("Invalid account role.");
+  if (response.status === 401) {
+    window.location.reload();
   }
-
-  if (USERS.some((user) => user.username.toLowerCase() === username)) {
-    throw new Error("Username already exists.");
-  }
-
-  const newUser = {
-    id: Math.max(0, ...USERS.map((user) => user.id)) + 1,
-    name,
-    username,
-    password,
-    role,
-    contactNumber,
-    active: true,
-  };
-
-  USERS.push(newUser);
-
-  const { password: _omit, ...safeUser } = newUser;
-  return safeUser;
-}
-
-export async function updateUser(id, updates) {
-  const user = USERS.find((item) => item.id === Number(id));
-
-  if (!user) throw new Error("User account not found.");
-
-  if (updates.name !== undefined) {
-    const name = String(updates.name).trim();
-    if (!name) throw new Error("Name is required.");
-    user.name = name;
-  }
-
-  if (updates.username !== undefined) {
-    const username = String(updates.username).trim().toLowerCase();
-    if (!username) throw new Error("Username is required.");
-
-    const duplicate = USERS.some(
-      (item) => item.id !== user.id && item.username.toLowerCase() === username,
+  if (!response.ok) {
+    throw new Error(
+      (data && data.message) || `Users request failed (${response.status}).`,
     );
-
-    if (duplicate) throw new Error("Username already exists.");
-    user.username = username;
+  }
+  if (!data || typeof data !== "object") {
+    throw new Error("The server returned an invalid users response.");
   }
 
-  if (updates.password) user.password = String(updates.password);
-
-  if (updates.role !== undefined) {
-    if (!["Admin", "Cashier"].includes(updates.role)) {
-      throw new Error("Invalid account role.");
-    }
-    user.role = updates.role;
-  }
-
-  if (updates.contactNumber !== undefined) {
-    user.contactNumber = cleanContact(updates.contactNumber);
-  }
-
-  if (updates.active !== undefined) user.active = Boolean(updates.active);
-
-  const { password: _omit, ...safeUser } = user;
-  return safeUser;
+  return data;
 }
 
-export async function updateUserStatus(id, active) {
-  return updateUser(id, { active });
+function mapAccountUser(user) {
+  const {
+    user_id: id,
+    full_name: name,
+    contact_number: contactNumber,
+    account_status: accountStatus,
+    ...rest
+  } = user;
+
+  return {
+    ...rest,
+    id,
+    name,
+    contactNumber,
+    active: accountStatus === "Active",
+  };
+}
+
+export async function getUsers(search = "", role = "") {
+  const params = new URLSearchParams({
+    search: String(search || ""),
+    role: String(role || ""),
+  });
+  const data = await usersRequest(`/users?${params}`);
+
+  if (!Array.isArray(data.users)) {
+    throw new Error("The server returned an invalid users list.");
+  }
+
+  return { ...data, users: data.users.map(mapAccountUser) };
+}
+
+export async function createUser(userData) {
+  const data = await usersRequest("/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      full_name: userData.name,
+      username: userData.username,
+      password: userData.password,
+      role: userData.role,
+      contact_number: userData.contactNumber,
+    }),
+  });
+  const { user_id: id, ...result } = data;
+
+  return { ...result, id };
+}
+
+export async function deactivateUser(id) {
+  const data = await usersRequest(`/users/${encodeURIComponent(id)}/deactivate`, {
+    method: "PATCH",
+  });
+
+  return {
+    ...data,
+    user: data.user ? mapAccountUser(data.user) : data.user,
+  };
 }
 
 // ---------- Products ----------
