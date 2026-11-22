@@ -67,6 +67,42 @@ def test_create_product_records_opening_stock_as_delivery(monkeypatch):
     assert any("INSERT INTO manages" in call.args[0] for call in cursor.execute.call_args_list)
 
 
+# Checks add-on product persistence. Expected: the product insert records the boolean flag.
+def test_create_product_persists_addon_flag(monkeypatch):
+    from app.services import inventory_service
+
+    cursor = MagicMock()
+    cursor.lastrowid = 15
+    cursor.fetchone.side_effect = [{"category_name": "Meals"}]
+    monkeypatch.setattr(
+        inventory_service,
+        "db_transaction",
+        lambda: _transaction_with(cursor),
+    )
+
+    inventory_service.create_product(_product_data(is_addon=True, current_stock="0"), 7)
+
+    product_insert = next(
+        call.args for call in cursor.execute.call_args_list
+        if "INSERT INTO products" in call.args[0]
+    )
+    assert "is_addon" in product_insert[0]
+    assert product_insert[1][8] is True
+
+
+def test_product_addon_flag_must_be_boolean():
+    from app.services import inventory_service
+
+    cursor = MagicMock()
+    cursor.fetchone.return_value = {"category_name": "Meals"}
+
+    with pytest.raises(inventory_service.DatabaseError, match="is_addon must be a boolean"):
+        inventory_service.normalize_product(
+            cursor,
+            _product_data(is_addon="yes"),
+        )
+
+
 # Checks editing stock from 10.00 to 8.00. Expected: a -2.00 Count Correction adjustment, not a direct stock update.
 def test_update_product_records_stock_difference_as_adjustment(monkeypatch):
     from app.services import inventory_service
@@ -102,7 +138,7 @@ def test_update_product_records_stock_difference_as_adjustment(monkeypatch):
     product_id = inventory_service.update_product(
         15,
         7,
-        {"current_stock": "8.00"},
+        {"current_stock": "8.00", "is_addon": True},
     )
 
     assert product_id == 15
@@ -111,6 +147,8 @@ def test_update_product_records_stock_difference_as_adjustment(monkeypatch):
         if "UPDATE products" in call.args[0]
     )
     assert "current_stock =" not in update_call[0]
+    assert "is_addon = %s" in update_call[0]
+    assert update_call[1][7] is True
     movement_insert = next(
         call.args for call in cursor.execute.call_args_list
         if "INSERT INTO stock_movement" in call.args[0]
@@ -273,8 +311,6 @@ def test_restore_product_rejects_non_archived_or_missing_products(
         "UPDATE products" in call.args[0]
         for call in cursor.execute.call_args_list
     )
-
-
 # Checks catalog/search/stock flag filters. Expected: available finished goods only in catalog and matching search/flag SQL.
 def test_catalog_and_stock_flags_filter_correctly(monkeypatch):
     from app.services import inventory_service
@@ -297,6 +333,7 @@ def test_catalog_and_stock_flags_filter_correctly(monkeypatch):
     assert "p.product_type = 'Finished Good'" in catalog_query
     assert "is_low_stock" in catalog_query
     assert "is_expired" in catalog_query
+    assert "p.is_addon" in catalog_query
 
     search_query, search_params = calls[1]
     assert "p.sku LIKE %s" in search_query
@@ -308,3 +345,42 @@ def test_catalog_and_stock_flags_filter_correctly(monkeypatch):
 
     expired_query, _ = calls[3]
     assert "p.expiry_date < CURDATE()" in expired_query
+
+
+def test_product_reads_return_addon_flags_as_booleans(monkeypatch):
+    from app.services import inventory_service
+
+    monkeypatch.setattr(
+        inventory_service,
+        "fetch_all",
+        lambda *_: [{"is_addon": 1}, {"is_addon": 0}],
+    )
+    monkeypatch.setattr(
+        inventory_service,
+        "fetch_one",
+        lambda *_: {"is_addon": 1},
+    )
+
+    products = inventory_service.get_catalog()
+    assert [product["is_addon"] for product in products] == [True, False]
+    assert inventory_service.get_product_by_sku("MEAL-001")["is_addon"] is True
+
+
+# Checks movement history includes product SKU and the recorded user's full name.
+def test_stock_movement_history_includes_sku_and_staff_name(monkeypatch):
+    from app.services import inventory_service
+
+    captured = {}
+
+    def fake_fetch_all(query, params=()):
+        captured["query"] = query
+        captured["params"] = params
+        return []
+
+    monkeypatch.setattr(inventory_service, "fetch_all", fake_fetch_all)
+
+    inventory_service.get_stock_movements()
+
+    assert "p.sku" in captured["query"]
+    assert "u.full_name AS staff_name" in captured["query"]
+    assert "JOIN users u" in captured["query"]

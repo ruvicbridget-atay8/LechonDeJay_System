@@ -35,6 +35,7 @@ PRODUCT_COLUMNS = """
     p.kilos,
     p.serving_pax,
     p.expiry_date,
+    p.is_addon,
     (p.current_stock <= p.reorder_level) AS is_low_stock,
     (p.expiry_date IS NOT NULL AND p.expiry_date < CURDATE()) AS is_expired
 """
@@ -146,6 +147,9 @@ def normalize_product(cursor, product_data, existing=None):
     category_id = positive_id(value("category_id"), "Category ID")
     category_name = get_category_name(cursor, category_id)
     product_type = normalize_product_type(value("product_type"))
+    is_addon = value("is_addon", False)
+    if type(is_addon) is not bool:
+        raise DatabaseError("is_addon must be a boolean.", 400)
     unit = product_unit(value("unit"))
     price = product_decimal(value("price"), "Price")
     current_stock = product_decimal(
@@ -208,6 +212,7 @@ def normalize_product(cursor, product_data, existing=None):
         "price": price,
         "unit": unit,
         "product_type": product_type,
+        "is_addon": is_addon,
         "current_stock": current_stock,
         "reorder_level": reorder_level,
         "status": status,
@@ -216,6 +221,16 @@ def normalize_product(cursor, product_data, existing=None):
         "serving_pax": serving_pax,
         "expiry_date": optional_date(value("expiry_date")),
     }
+
+
+def normalize_product_addon_flag(product):
+    if product is not None:
+        product["is_addon"] = bool(product["is_addon"])
+    return product
+
+
+def normalize_product_addon_flags(products):
+    return [normalize_product_addon_flag(product) for product in products]
 
 
 def record_management(cursor, user_id, product_id, action_type):
@@ -409,12 +424,13 @@ def create_product(product_data, user_id):
                 reorder_level,
                 status,
                 product_type,
+                is_addon,
                 size,
                 kilos,
                 serving_pax,
                 expiry_date
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 product["sku"],
@@ -425,6 +441,7 @@ def create_product(product_data, user_id):
                 product["reorder_level"],
                 product["status"],
                 product["product_type"],
+                product["is_addon"],
                 product["size"],
                 product["kilos"],
                 product["serving_pax"],
@@ -495,6 +512,7 @@ def update_product(product_id, user_id, product_data):
                 reorder_level = %s,
                 status = %s,
                 product_type = %s,
+                is_addon = %s,
                 size = %s,
                 kilos = %s,
                 serving_pax = %s,
@@ -509,6 +527,7 @@ def update_product(product_id, user_id, product_data):
                 product["reorder_level"],
                 product["status"],
                 product["product_type"],
+                product["is_addon"],
                 product["size"],
                 product["kilos"],
                 product["serving_pax"],
@@ -609,13 +628,13 @@ def search_products(search_term=None):
         """
         params = (term, term, term)
     query += " ORDER BY p.name, p.product_id"
-    return fetch_all(query, params)
+    return normalize_product_addon_flags(fetch_all(query, params))
 
 
 def get_product_by_sku(sku):
     """Return one product and its stock/expiry flags by SKU."""
     sku = required_text(sku, "SKU", 30).upper()
-    product = fetch_one(
+    product = normalize_product_addon_flag(fetch_one(
         f"""
         SELECT {PRODUCT_COLUMNS}
         FROM products p
@@ -623,7 +642,7 @@ def get_product_by_sku(sku):
         WHERE p.sku = %s
         """,
         (sku,),
-    )
+    ))
     if product is None:
         raise DatabaseError("Product not found.", 404)
     return product
@@ -631,20 +650,20 @@ def get_product_by_sku(sku):
 
 def get_catalog():
     """Return only products marked Available and typed as Finished Good."""
-    return fetch_all(f"""
+    return normalize_product_addon_flags(fetch_all(f"""
         SELECT {PRODUCT_COLUMNS}
         FROM products p
         JOIN categories c ON c.category_id = p.category_id
         WHERE p.status = 'Available'
           AND p.product_type = 'Finished Good'
         ORDER BY p.name, p.product_id
-    """)
+    """))
 
 
 def get_product_stock(product_id):
     """Return current inventory details for one product."""
     product_id = positive_id(product_id, "Product ID")
-    product = fetch_one(
+    product = normalize_product_addon_flag(fetch_one(
         f"""
         SELECT {PRODUCT_COLUMNS}
         FROM products p
@@ -652,7 +671,7 @@ def get_product_stock(product_id):
         WHERE p.product_id = %s
         """,
         (product_id,),
-    )
+    ))
 
     if product is None:
         raise DatabaseError("Product not found.", 404)
@@ -672,8 +691,10 @@ def get_stock_movements(
         SELECT
             sm.movement_id,
             sm.product_id,
+            p.sku,
             p.name AS product_name,
             sm.user_id,
+            u.full_name AS staff_name,
             sm.movement_type,
             sm.quantity,
             sm.reason,
@@ -681,6 +702,8 @@ def get_stock_movements(
         FROM stock_movement sm
         JOIN products p
             ON p.product_id = sm.product_id
+        JOIN users u
+            ON u.user_id = sm.user_id
         WHERE 1 = 1
     """
 
@@ -715,23 +738,23 @@ def get_stock_movements(
 
 def get_low_stock_products():
     """Return products at or below their reorder level."""
-    return fetch_all(f"""
+    return normalize_product_addon_flags(fetch_all(f"""
         SELECT {PRODUCT_COLUMNS}
         FROM products p
         JOIN categories c ON c.category_id = p.category_id
         WHERE p.current_stock <= p.reorder_level
           AND p.status <> 'Archived'
         ORDER BY p.current_stock ASC, p.name ASC
-    """)
+    """))
 
 
 def get_expired_products():
     """Return non-archived products whose expiry date is before today."""
-    return fetch_all(f"""
+    return normalize_product_addon_flags(fetch_all(f"""
         SELECT {PRODUCT_COLUMNS}
         FROM products p
         JOIN categories c ON c.category_id = p.category_id
         WHERE p.expiry_date < CURDATE()
           AND p.status <> 'Archived'
         ORDER BY p.expiry_date ASC, p.name ASC
-    """)
+    """))
