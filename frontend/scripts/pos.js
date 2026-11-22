@@ -307,6 +307,7 @@ export async function renderPos(container, user) {
         <div class="product-img"><i class="bi bi-image"></i></div>
         <div class="product-info">
           <span class="product-name">${esc(p.name)}</span>
+          ${p.isAddon ? '<span class="status-chip status-warning">Add-on</span>' : ""}
           <span class="product-price">${peso(p.price)}</span>
         </div>
       </button>`,

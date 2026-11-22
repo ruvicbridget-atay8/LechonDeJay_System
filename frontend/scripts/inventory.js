@@ -125,6 +125,12 @@ function productFormContent(product = null, categories = []) {
           </select>
         </div>
 
+        <div class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;">
+          <input id="product-is-addon" name="isAddon" type="checkbox"
+            ${product?.isAddon ? "checked" : ""} />
+          <label for="product-is-addon">Add-on item</label>
+        </div>
+
         <div class="field">
           <label for="product-price">Selling Price (₱) *</label>
           <input class="input" id="product-price" name="price"
@@ -286,6 +292,7 @@ function renderProductModal(table, categories, product = null) {
           price: formData.get("price"),
           reorderLevel: formData.get("reorderLevel"),
           status: formData.get("status"),
+          isAddon: formData.has("isAddon"),
         });
       } else {
         const categoryId = Number(formData.get("categoryId"));
@@ -302,6 +309,7 @@ function renderProductModal(table, categories, product = null) {
           reorderLevel: formData.get("reorderLevel"),
           status: formData.get("status"),
           expiryDate: formData.get("expiryDate"),
+          isAddon: formData.has("isAddon"),
         };
 
         if (category?.name === "Whole Lechon") {
@@ -605,7 +613,10 @@ export async function renderInventory(container, user) {
       {
         key: "name",
         label: "Product Name",
-        render: (product) => `<strong>${escapeHTML(product.name)}</strong>`,
+        render: (product) => `
+          <strong>${escapeHTML(product.name)}</strong>
+          ${product.isAddon ? '<span class="status-chip status-warning">Add-on</span>' : ""}
+        `,
       },
 
       { key: "category", label: "Category" },

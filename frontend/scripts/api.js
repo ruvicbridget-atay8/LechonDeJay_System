@@ -254,6 +254,7 @@ function mapProduct(product) {
     product_type: productType,
     expiry_date: expiryDate,
     serving_pax: servingPax,
+    is_addon: isAddon,
     is_low_stock: isLowStock,
     is_expired: isExpired,
     ...rest
@@ -271,6 +272,7 @@ function mapProduct(product) {
     expiryDate,
     kilos: numeric(product.kilos),
     servingPax: numeric(servingPax),
+    isAddon: isAddon === true || Number(isAddon) === 1,
     isLowStock: isLowStock === true || Number(isLowStock) === 1,
     isExpired: isExpired === true || Number(isExpired) === 1,
   };
@@ -392,6 +394,7 @@ export async function createProduct(productData) {
     reorder_level: productData.reorderLevel,
     status: productData.status,
     expiry_date: productData.expiryDate || null,
+    is_addon: productData.isAddon === true,
   };
 
   if (productData.category === "Whole Lechon") {
@@ -416,6 +419,7 @@ export async function updateProduct(sku, updates) {
     body.reorder_level = updates.reorderLevel;
   }
   if (updates.status !== undefined) body.status = updates.status;
+  if (updates.isAddon !== undefined) body.is_addon = updates.isAddon;
 
   const data = await inventoryRequest(
     `/inventory/${encodeURIComponent(sku)}`,
