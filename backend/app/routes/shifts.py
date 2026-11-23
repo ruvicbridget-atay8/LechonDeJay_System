@@ -1,5 +1,3 @@
-from datetime import date
-
 from flask import Blueprint, jsonify, request, session
 
 from app.services import shift_service
@@ -38,20 +36,7 @@ def open_shift():
 @role_required("Cashier", "Admin")
 def current_shift():
     user_id = session["user_id"]
-    today = date.today().isoformat()
-
-    shifts = shift_service.list_shifts(
-        requester_user_id=user_id,
-        start_date=today,
-        end_date=today,
-        status="Open",
-    )
-
-    # An Admin must not accidentally see another user's
-    # shift as their own current shift.
-    own_shifts = [shift for shift in shifts if shift["user_id"] == user_id]
-
-    current = own_shifts[0] if own_shifts else None
+    current = shift_service.get_open_shift(user_id)
     return respond(current)
 
 

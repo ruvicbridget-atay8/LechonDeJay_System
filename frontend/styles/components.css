@@ -945,6 +945,14 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
+}
+
+.transaction-print-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0 14px;
   padding: 6px 0;
   font-size: 13px;
 }
@@ -1088,10 +1096,10 @@
 
 /* Make both transaction pop-ups smaller */
 .shared-modal:has(.transaction-receipt) {
-  width: min(480px, calc(100vw - 32px)) !important;
-  max-width: 480px !important;
-  max-height: 82vh;
-  border-radius: 11px;
+  width: min(520px, calc(100vw - 32px)) !important;
+  max-width: 520px !important;
+  max-height: 84vh;
+  border-radius: 12px;
 }
 
 /* Compact modal header */
@@ -1123,7 +1131,7 @@
 
 /* Receipt heading */
 .transaction-receipt-header {
-  padding: 5px 0 11px;
+  padding: 8px 0 12px;
   margin-bottom: 0;
 }
 
@@ -1140,13 +1148,13 @@
 /* Order and transaction information */
 .transaction-receipt-info {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-  padding: 11px 0;
+  gap: 9px 18px;
+  padding: 12px 0;
 }
 
 .transaction-receipt-info > div {
   gap: 2px;
-  font-size: 11px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
@@ -1156,8 +1164,8 @@
 
 /* Items section */
 .transaction-items-heading {
-  margin: 12px 0 7px;
-  font-size: 13px;
+  margin: 10px 0 6px;
+  font-size: 14px;
 }
 
 .transaction-items-table {
@@ -1167,7 +1175,7 @@
 
 .transaction-items-table th,
 .transaction-items-table td {
-  padding: 6px 5px;
+  padding: 7px 6px;
   font-size: 11px;
 }
 
@@ -1178,19 +1186,37 @@
 
 /* Receipt totals */
 .transaction-receipt-totals {
-  margin-top: 11px;
-  padding: 9px 0;
+  margin-top: 10px;
+  padding: 10px 0;
 }
 
 .transaction-receipt-totals > div {
-  padding: 4px 0;
+  padding: 5px 0;
   font-size: 11px;
 }
 
 .transaction-total-due {
-  margin: 5px 0;
-  padding: 8px 0 !important;
-  font-size: 14px !important;
+  margin: 6px 0;
+  padding: 9px 0 !important;
+  border-top: 1px dashed #d0d5dd;
+  border-bottom: 1px dashed #d0d5dd;
+  font-size: 15px !important;
+  color: #4a0a0e;
+}
+
+.transaction-print-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 4px 0 12px;
+  padding: 8px 0 0;
+  border-top: 1px solid #eaecf0;
+}
+
+.transaction-print-actions .btn {
+  min-height: 38px;
+  margin: 0;
+  font-size: 12px;
 }
 
 /* Completed / Voided / Refunded status */
@@ -1269,6 +1295,10 @@
 
   .transaction-receipt-info {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .transaction-print-actions {
+    grid-template-columns: 1fr;
   }
 
   .transaction-receipt {

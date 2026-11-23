@@ -34,6 +34,85 @@ const esc = (s) =>
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
+function printDocument(title, bodyHTML) {
+  const printWindow = window.open("", "_blank", "width=480,height=700");
+  if (!printWindow) throw new Error("Allow pop-ups to print a receipt.");
+
+  printWindow.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>${esc(title)}</title>
+        <style>
+          body { width: 280px; margin: 0 auto; font: 12px monospace; color: #000; line-height: 1.35; }
+          h1, h2, p { margin: 4px 0; text-align: center; }
+          h1 { font-size: 18px; }
+          h2 { font-size: 14px; }
+          table { width: 100%; border-collapse: collapse; }
+          td { padding: 4px 0; vertical-align: top; }
+          td:last-child { text-align: right; white-space: nowrap; }
+          .meta { border-top: 1px dashed #000; border-bottom: 1px dashed #000; margin: 8px 0; padding: 6px 0; }
+          .line { display: flex; justify-content: space-between; gap: 12px; text-align: left; }
+          .total { border-top: 1px dashed #000; margin-top: 8px; padding-top: 8px; font-size: 14px; }
+          .items { border-bottom: 1px dashed #000; margin: 8px 0; }
+          @media print { @page { margin: 4mm; } }
+        </style>
+      </head>
+      <body>${bodyHTML}</body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => printWindow.print(), 250);
+}
+
+async function printTransaction(transactionId, kind) {
+  if (kind === "kitchen") {
+    const ticket = await api.getKitchenTicket(transactionId);
+    const items = (ticket.items || [])
+      .map((item) => `
+        <tr>
+          <td>${esc(item.product_name)} x${esc(item.quantity)}</td>
+        </tr>
+      `)
+      .join("");
+    printDocument("Kitchen Ticket", `
+      <h1>LECHON DE JAY</h1>
+      <h2>KITCHEN TICKET</h2>
+      <div class="meta">
+        <p>Order# ${esc(ticket.order_number)}</p>
+        <p>${esc(ticket.order_type)}</p>
+      </div>
+      <table class="items">${items}</table>
+    `);
+    return;
+  }
+
+  const receipt = await api.getTransactionReceipt(transactionId);
+  const items = (receipt.items || [])
+    .map((item) => `
+      <tr>
+        <td>${esc(item.product_name)} x${esc(item.quantity)}</td>
+        <td>${peso(item.line_total)}</td>
+      </tr>
+    `)
+    .join("");
+  printDocument("Transaction Receipt", `
+    <h1>LECHON DE JAY</h1>
+    <h2>Transaction Receipt</h2>
+    <div class="meta">
+      <p>Order# ${esc(receipt.order_number)}</p>
+      <p>Transaction# ${esc(receipt.transaction_id)}</p>
+    </div>
+    <table class="items">${items}</table>
+    <p class="line">Subtotal <strong>${peso(receipt.subtotal)}</strong></p>
+    <p class="line">Discount <strong>${peso(receipt.discount_amount)}</strong></p>
+    <p class="line total"><strong>Total</strong><strong>${peso(receipt.total_due)}</strong></p>
+    <p class="line">Amount Tendered <strong>${peso(receipt.amount)}</strong></p>
+    <p class="line">Change <strong>${peso(receipt.amount - receipt.total_due)}</strong></p>
+  `);
+}
+
 /* ---------- Order state (kept while the user moves between pages) ---------- */
 const emptyCheckout = () => ({
   discountType: "Regular",
@@ -130,7 +209,7 @@ export function resetOrder() {
 }
 // Popup shown after the order is saved. onClose runs when the Cashier taps OK.
 function showOrderPlaced(
-  { orderNo, subtotal, discountAmount, total, amountTendered, change },
+  { transactionId, orderNo, subtotal, discountAmount, total, amountTendered, change },
   onClose,
 ) {
   const overlay = document.createElement("div");
@@ -145,9 +224,32 @@ function showOrderPlaced(
       <p>Total: <strong>${peso(total)}</strong></p>
       <p>Amount Tendered: <strong>${peso(amountTendered)}</strong></p>
       ${change > 0 ? `<p>Change: <strong>${peso(change)}</strong></p>` : ""}
+      <button class="btn btn--soft btn--block" id="print-kitchen-ticket" type="button">Print Kitchen Ticket</button>
+      <button class="btn btn--soft btn--block" id="print-receipt" type="button">Print Receipt</button>
       <button class="btn btn--primary btn--block" type="button">OK</button>
     </div>`;
   document.body.appendChild(overlay);
+
+  overlay.querySelector("#print-kitchen-ticket").addEventListener("click", async (event) => {
+    event.currentTarget.disabled = true;
+    try {
+      await printTransaction(transactionId, "kitchen");
+    } catch (error) {
+      window.alert(error.message || "Could not print the kitchen ticket.");
+    } finally {
+      event.currentTarget.disabled = false;
+    }
+  });
+  overlay.querySelector("#print-receipt").addEventListener("click", async (event) => {
+    event.currentTarget.disabled = true;
+    try {
+      await printTransaction(transactionId, "receipt");
+    } catch (error) {
+      window.alert(error.message || "Could not print the receipt.");
+    } finally {
+      event.currentTarget.disabled = false;
+    }
+  });
 
   const okBtn = overlay.querySelector("button");
   okBtn.focus();
@@ -503,6 +605,7 @@ export async function renderPos(container, user) {
     try {
       const saved = await api.saveTransaction(buildOrder(user));
       const summary = {
+        transactionId: saved.transactionId,
         orderNo: saved.orderNumber,
         subtotal: saved.subtotal,
         discountAmount: saved.discountAmount,

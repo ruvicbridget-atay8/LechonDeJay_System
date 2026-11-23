@@ -71,15 +71,22 @@ def test_open_shift_service_validation_error(client):
 
 
 def test_current_shift_only_returns_own_shift(client):
-    shifts = [{"shift_id": 9, "user_id": 2}, {"shift_id": 8, "user_id": 1}]
-    with login(client, role="Admin"), patch("app.routes.shifts.shift_service.list_shifts", return_value=shifts):
+    shift = {"shift_id": 8, "user_id": 1}
+    with login(client, role="Admin"), patch(
+        "app.routes.shifts.shift_service.get_open_shift",
+        return_value=shift,
+    ) as get_open_shift:
         response = client.get("/shifts/current")
     assert response.status_code == 200
     assert response.json["data"]["shift_id"] == 8
+    get_open_shift.assert_called_once_with(1)
 
 
 def test_current_shift_when_none(client):
-    with login(client), patch("app.routes.shifts.shift_service.list_shifts", return_value=[]):
+    with login(client), patch(
+        "app.routes.shifts.shift_service.get_open_shift",
+        return_value=None,
+    ):
         response = client.get("/shifts/current")
     assert response.status_code == 200
     assert response.json["data"] is None

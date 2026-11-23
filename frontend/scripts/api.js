@@ -665,14 +665,84 @@ export async function saveTransaction(order) {
   };
 }
 
+export async function getTransactionReceipt(transactionId) {
+  const response = await inventoryRequest(
+    `/transactions/${Number(transactionId)}/receipt`,
+  );
+  return response.data;
+}
+
+export async function getKitchenTicket(transactionId) {
+  const response = await inventoryRequest(
+    `/transactions/${Number(transactionId)}/kitchen-ticket`,
+  );
+  return response.data;
+}
+
 // ---------- Get Transactions ----------
 export async function getTransactions(user) {
-  return TRANSACTIONS.filter(
-    (t) => user.role === "Admin" || t.staff === user.name,
-  ).map((t) => ({
-    ...t,
-    items: Array.isArray(t.items) ? t.items.map((item) => ({ ...item })) : [],
-  }));
+  const response = await inventoryRequest("/transactions");
+  const records = Array.isArray(response.data) ? response.data : [];
+
+  return Promise.all(
+    records.map(async (record) => {
+      let detail = record;
+      try {
+        const detailResponse = await inventoryRequest(
+          `/transactions/${record.transaction_id}`,
+        );
+        detail = detailResponse.data || record;
+      } catch {
+        detail = record;
+      }
+
+      const items = Array.isArray(detail.items)
+        ? detail.items.map((item) => ({
+            sku: item.sku || "",
+            name: item.product_name || item.name || "",
+            qty: Number(item.quantity ?? item.qty ?? 0),
+            price: numeric(item.unit_price ?? item.price),
+            lineTotal: numeric(item.line_total ?? item.lineTotal),
+          }))
+        : [];
+      const total = numeric(detail.total_due);
+      const amountTendered = numeric(detail.amount);
+      const change =
+        detail.payment_method_name === "Cash"
+          ? Math.max(0, Number(amountTendered || 0) - Number(total || 0))
+          : 0;
+
+      return {
+        transactionId: Number(detail.transaction_id),
+        orderNumber: detail.order_number,
+        dateTime: detail.date_time,
+        staff: detail.processed_by_name || user.name,
+        itemName: detail.item_name,
+        items,
+        paymentMethod:
+          detail.payment_method_name ||
+          detail.payment_method ||
+          (detail.payment_method_id === 1
+            ? "Cash"
+            : detail.payment_method_id === 2
+              ? "GCash/E-Wallet"
+              : detail.payment_method_id === 3
+                ? "Card"
+                : "—"),
+        subtotal: numeric(detail.subtotal),
+        discountAmount: numeric(detail.discount_amount),
+        total,
+        amountTendered,
+        change,
+        status: detail.status,
+        orderType: detail.order_type,
+        customerName: detail.customer_name,
+        customerContact: detail.customer_contact,
+        voidRefundReason: detail.void_refund_reason,
+        approvedByUserId: detail.approved_by_user_id,
+      };
+    }),
+  );
 }
 
 // ---------- Void / Refund Requests ----------
@@ -682,22 +752,6 @@ export async function requestTransactionAction({
   reason,
   staff,
 }) {
-  const transaction = TRANSACTIONS.find(
-    (t) =>
-      String(t.transactionId) === String(transactionId) ||
-      String(t.orderNumber) === String(transactionId),
-  );
-
-  if (!transaction) {
-    throw new Error("Transaction not found.");
-  }
-
-  if (String(transaction.status).toLowerCase() !== "completed") {
-    throw new Error(
-      "Only completed transactions can be requested for void or refund.",
-    );
-  }
-
   if (!["Void", "Refund"].includes(requestType)) {
     throw new Error("Please select Void or Refund.");
   }
@@ -708,57 +762,82 @@ export async function requestTransactionAction({
     throw new Error("Please provide a reason for this request.");
   }
 
-  if (transaction.requestStatus === "Pending") {
-    throw new Error("This transaction already has a pending request.");
-  }
-
-  transaction.requestType = requestType;
-  transaction.requestReason = cleanReason;
-  transaction.requestStatus = "Pending";
-  transaction.requestedBy = String(staff || transaction.staff || "Cashier");
-  transaction.requestedAt = new Date().toISOString();
-
-  return {
-    ...transaction,
-    items: transaction.items.map((item) => ({ ...item })),
-  };
+  await inventoryRequest("/approvals/requests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      transaction_id: Number(transactionId),
+      request_type: requestType,
+      reason: cleanReason,
+    }),
+  });
+  return { success: true };
 }
 
 // ---------- Approval Requests (Admin) ----------
 // Pending void and refund requests, oldest first.
 export async function getPendingRequests() {
-  return TRANSACTIONS.filter((t) => t.requestStatus === "Pending")
-    .sort((a, b) => new Date(a.requestedAt) - new Date(b.requestedAt))
-    .map((t) => ({
-      ...t,
-      items: Array.isArray(t.items) ? t.items.map((item) => ({ ...item })) : [],
-    }));
+  const response = await inventoryRequest("/approvals/requests?status=Pending");
+  const requests = Array.isArray(response.data) ? response.data : [];
+
+  return Promise.all(
+    requests.map(async (request) => {
+      const transactionResponse = await inventoryRequest(
+        `/transactions/${request.transaction_id}`,
+      );
+      const transaction = transactionResponse.data || {};
+      const items = Array.isArray(transaction.items)
+        ? transaction.items.map((item) => ({
+            sku: item.sku || "",
+            name: item.product_name || item.name || "",
+            qty: Number(item.quantity ?? item.qty ?? 0),
+            price: numeric(item.unit_price ?? item.price),
+            lineTotal: numeric(item.line_total ?? item.lineTotal),
+          }))
+        : [];
+      const total = numeric(transaction.total_due);
+      const amountTendered = numeric(transaction.amount);
+
+      return {
+        requestId: request.request_id,
+        transactionId: request.transaction_id,
+        orderNumber: transaction.order_number,
+        dateTime: transaction.date_time,
+        staff: transaction.processed_by_name || "",
+        itemName: transaction.item_name,
+        items,
+        paymentMethod: transaction.payment_method_name || "—",
+        subtotal: numeric(transaction.subtotal),
+        discountAmount: numeric(transaction.discount_amount),
+        total,
+        amountTendered,
+        change:
+          transaction.payment_method_name === "Cash"
+            ? Math.max(0, Number(amountTendered || 0) - Number(total || 0))
+            : 0,
+        status: "Completed",
+        requestType: request.request_type,
+        requestReason: request.reason,
+        requestStatus: "Pending",
+      };
+    }),
+  );
 }
 
 // Approve a pending void or refund request.
 // Only the transaction record changes. Stock is not touched.
 export async function approveTransactionRequest(transactionId, admin) {
-  const transaction = TRANSACTIONS.find(
-    (t) => String(t.transactionId) === String(transactionId),
+  const requests = await getPendingRequests();
+  const request = requests.find(
+    (item) => String(item.transactionId) === String(transactionId),
   );
+  if (!request) throw new Error("Pending request not found.");
 
-  if (!transaction) throw new Error("Transaction not found.");
-
-  if (transaction.requestStatus !== "Pending") {
-    throw new Error("This request is no longer pending.");
-  }
-
-  transaction.status =
-    transaction.requestType === "Void" ? "Voided" : "Refunded";
-  transaction.requestStatus = "Approved";
-  transaction.voidRefundReason = transaction.requestReason;
-  transaction.approvedBy = String(admin || "Admin");
-  transaction.approvedAt = new Date().toISOString();
-
-  return {
-    ...transaction,
-    items: transaction.items.map((item) => ({ ...item })),
-  };
+  await inventoryRequest(
+    `/approvals/requests/${request.requestId}/approve`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+  );
+  return { success: true };
 }
 
 // ---------- Admin: correct a completed transaction (FR-46) ----------
@@ -973,137 +1052,152 @@ export async function voidRefundTransaction(
   };
 }
 
-// ---------- Shifts: Mock Data ----------
-const dayKey = (value) => new Date(value).toLocaleDateString("en-CA");
-
-const money = (n) => Math.round(Number(n) * 100) / 100;
-
-const daysAgo = (n) => {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return dayKey(d);
+// ---------- Shifts ----------
+const localDateKey = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return [
+    String(date.getFullYear()).padStart(4, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
 };
 
-const pastShift = (id, n, opening, salesCount, cashSales, actual) => ({
-  shiftId: id,
-  staff: "Elle Santos",
-  shiftDate: daysAgo(n),
-  openingCash: opening,
-  salesCount,
-  cashSales,
-  expectedCash: opening + cashSales,
-  actualCash: actual,
-  cashDifference: actual - (opening + cashSales),
-  status: "Closed",
-});
+const normalizeShiftDate = (value) => {
+  if (typeof value === "string") {
+    const iso = value.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
 
-const SHIFTS = [
-  pastShift(1, 6, 3500, 12, 1188, 4680),
-  pastShift(2, 5, 2000, 28, 5227, 7200),
-  pastShift(3, 4, 2000, 25, 4600, 6600),
-  pastShift(4, 3, 2200, 19, 3980, 6200),
-  pastShift(5, 2, 2000, 31, 5120, 7120),
-  pastShift(6, 1, 2000, 22, 4350, 6300),
-];
-
-let nextShiftId = 7;
-
-// ---------- Get Shifts ----------
-export async function getShifts(user) {
-  return SHIFTS.filter((s) => user.role === "Admin" || s.staff === user.name)
-    .sort((a, b) => b.shiftId - a.shiftId)
-    .map((s) => ({ ...s }));
-}
-
-// ---------- Open Shift ----------
-export async function openShift(user, openingCash) {
-  const amount = Number(openingCash);
-
-  if (openingCash === "" || !Number.isFinite(amount) || amount < 0) {
-    throw new Error("Enter the opening cash.");
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return localDateKey(parsed);
   }
+  if (value instanceof Date) return localDateKey(value);
+  return "";
+};
 
-  const today = dayKey(new Date());
-
-  if (SHIFTS.some((s) => s.staff === user.name && s.shiftDate === today)) {
-    throw new Error("You already have a shift today.");
+const validateShiftMoney = (value, label) => {
+  if (value === "" || value === null || value === undefined) {
+    throw new Error(`${label} is required.`);
   }
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error(`${label} cannot be negative.`);
+  }
+  if (Math.abs(amount * 100 - Math.round(amount * 100)) > 0.000001) {
+    throw new Error(`${label} can have at most 2 decimal places.`);
+  }
+  return Math.round(amount * 100) / 100;
+};
 
-  const shift = {
-    shiftId: nextShiftId++,
-    staff: user.name,
-    shiftDate: today,
-    openingCash: money(amount),
-    salesCount: 0,
-    cashSales: 0,
-    expectedCash: money(amount),
-    actualCash: null,
-    cashDifference: null,
-    status: "Open",
-  };
-
-  SHIFTS.push(shift);
-
-  return { ...shift };
-}
-
-// ---------- Shift Summary ----------
-export async function getShiftSummary(user) {
-  const shift = SHIFTS.find(
-    (s) => s.staff === user.name && s.status === "Open",
-  );
-
-  if (!shift) throw new Error("No shift is open.");
-
-  const sales = (await getTransactions(user)).filter(
-    (t) => t.status === "Completed" && dayKey(t.dateTime) === shift.shiftDate,
-  );
-
-  const cash = sales.filter((t) => {
-    const method = String(t.payment || t.paymentMethod || t.paymentType || "")
-      .trim()
-      .toLowerCase();
-
-    return method === "cash" || method.includes("cash");
-  });
-
-  const cashSales = money(
-    cash.reduce((sum, t) => sum + Number(t.total || 0), 0),
-  );
+const mapShift = (shift) => {
+  if (!shift) return null;
+  const openingCash = numeric(shift.opening_cash);
+  const actualCash =
+    shift.actual_cash == null ? null : numeric(shift.actual_cash);
+  const cashSales =
+    shift.cash_sales == null ? 0 : numeric(shift.cash_sales);
+  const expectedCash =
+    shift.expected_cash == null
+      ? Math.round((openingCash + cashSales) * 100) / 100
+      : numeric(shift.expected_cash);
+  const cashDifference =
+    shift.cash_difference == null
+      ? actualCash == null
+        ? null
+        : Math.round((actualCash - expectedCash) * 100) / 100
+      : numeric(shift.cash_difference);
 
   return {
-    openingCash: shift.openingCash,
-    salesCount: sales.length,
-    cashOrders: cash.length,
+    shiftId: Number(shift.shift_id),
+    staff: shift.cashier_name || shift.full_name || "",
+    shiftDate: normalizeShiftDate(shift.shift_date),
+    openingCash,
+    salesCount: numeric(shift.sales_count) || 0,
     cashSales,
-    expectedCash: money(shift.openingCash + cashSales),
+    expectedCash,
+    actualCash,
+    cashDifference,
+    status: actualCash == null ? "Open" : "Closed",
+  };
+};
+
+export async function getShifts(_user, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.startDate) params.set("start_date", filters.startDate);
+  if (filters.endDate) params.set("end_date", filters.endDate);
+  if (filters.status) params.set("status", filters.status);
+  const query = params.toString();
+  const response = await inventoryRequest(
+    `/shifts${query ? `?${query}` : ""}`,
+  );
+  if (!Array.isArray(response.data)) {
+    throw new Error("The server returned an invalid shift list.");
+  }
+  return response.data.map(mapShift).filter(Boolean);
+}
+
+export async function openShift(_user, openingCash) {
+  const amount = validateShiftMoney(openingCash, "Opening cash");
+  const response = await inventoryRequest("/shifts/open", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ opening_cash: amount }),
+  });
+  if (!response.data?.shift) {
+    throw new Error("The server returned an invalid open-shift response.");
+  }
+  return mapShift(response.data.shift);
+}
+
+export async function getShiftSummary(user) {
+  const response = await inventoryRequest("/shifts/current");
+  const shift = mapShift(response.data);
+  if (!shift) throw new Error("No shift is open.");
+
+  const transactions = await getTransactions(user);
+  const shiftTransactions = transactions.filter(
+    (transaction) =>
+      transaction.status === "Completed" &&
+      normalizeShiftDate(transaction.dateTime) === shift.shiftDate,
+  );
+  const cashTransactions = shiftTransactions.filter((transaction) => {
+    const method = String(
+      transaction.paymentMethod || transaction.payment || "",
+    )
+      .trim()
+      .toLowerCase();
+    return method === "cash" || method.includes("cash");
+  });
+  const cashSales = Math.round(
+    cashTransactions.reduce(
+      (sum, transaction) => sum + Number(transaction.total || 0),
+      0,
+    ) * 100,
+  ) / 100;
+
+  return {
+    ...shift,
+    salesCount: shiftTransactions.length,
+    cashOrders: cashTransactions.length,
+    cashSales,
+    expectedCash: Math.round((shift.openingCash + cashSales) * 100) / 100,
   };
 }
 
-// ---------- Close Shift ----------
-export async function closeShift(user, actualCash) {
-  const amount = Number(actualCash);
-
-  if (actualCash === "" || !Number.isFinite(amount) || amount < 0) {
-    throw new Error("Enter the cash counted.");
-  }
-
-  const shift = SHIFTS.find(
-    (s) => s.staff === user.name && s.status === "Open",
-  );
-
-  if (!shift) throw new Error("No shift is open.");
-
-  const summary = await getShiftSummary(user);
-
-  Object.assign(shift, {
-    salesCount: summary.salesCount,
-    cashSales: summary.cashSales,
-    expectedCash: summary.expectedCash,
-    actualCash: money(amount),
-    cashDifference: money(amount - summary.expectedCash),
-    status: "Closed",
+export async function closeShift(_user, actualCash) {
+  const amount = validateShiftMoney(actualCash, "Actual cash");
+  const current = await inventoryRequest("/shifts/current");
+  if (!current.data?.shift_id) throw new Error("No shift is open.");
+  const response = await inventoryRequest("/shifts/close", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      actual_cash: amount,
+      shift_id: Number(current.data.shift_id),
+    }),
   });
-
-  return { ...shift };
+  if (!response.data?.shift) {
+    throw new Error("The server returned an invalid close-shift response.");
+  }
+  return mapShift(response.data.shift);
 }

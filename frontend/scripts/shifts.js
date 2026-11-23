@@ -58,7 +58,14 @@ export async function renderShifts(container, user) {
     let shifts = await api.getShifts(user);
     let panel = "none"; // "none" | "open" | "close"
 
-    const todayKey = () => new Date().toLocaleDateString("en-CA");
+    const todayKey = () => {
+      const now = new Date();
+      return [
+        String(now.getFullYear()).padStart(4, "0"),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0"),
+      ].join("-");
+    };
     const getOpenShift = () => shifts.find(isOpen) || null;
     const getTodayShift = () => shifts.find((s) => s.shiftDate === todayKey()) || null;
 
@@ -75,6 +82,25 @@ export async function renderShifts(container, user) {
         <div class="shift-cards" id="shift-cards"></div>
 
         <h2 class="shifts-section-title">Cash Drawer Logs</h2>
+        <div class="shift-history-filters" id="shift-history-filters">
+          <label>
+            <span>Start date</span>
+            <input class="input" type="date" id="shift-start-date" />
+          </label>
+          <label>
+            <span>End date</span>
+            <input class="input" type="date" id="shift-end-date" />
+          </label>
+          <label>
+            <span>Status</span>
+            <select class="input" id="shift-status">
+              <option value="">All</option>
+              <option value="Open">Open</option>
+              <option value="Closed">Closed</option>
+            </select>
+          </label>
+          <button class="btn btn--soft" type="button" id="apply-shift-filters">Apply</button>
+        </div>
         <div id="shift-log"></div>
       </div>
     `;
@@ -114,6 +140,31 @@ export async function renderShifts(container, user) {
       pageSize: 8,
       emptyMessage: "No shifts have been recorded yet.",
     });
+
+    const historyFilters = container.querySelector("#shift-history-filters");
+    historyFilters
+      ?.querySelector("#apply-shift-filters")
+      ?.addEventListener("click", async () => {
+        const button = historyFilters.querySelector("#apply-shift-filters");
+        button.disabled = true;
+        button.textContent = "Loading...";
+        try {
+          const startDate = historyFilters.querySelector("#shift-start-date").value;
+          const endDate = historyFilters.querySelector("#shift-end-date").value;
+          if (startDate && endDate && endDate < startDate) {
+            throw new Error("End date cannot be before start date.");
+          }
+          const status = historyFilters.querySelector("#shift-status").value;
+          shifts = await api.getShifts(user, { startDate, endDate, status });
+          table.setData(toRows(shifts));
+          drawActions();
+        } catch (err) {
+          showToast(err.message || "Could not filter shifts.");
+        } finally {
+          button.disabled = false;
+          button.textContent = "Apply";
+        }
+      });
 
     /* ---------- Header button: depends on the shift state ---------- */
     function drawActions() {
@@ -169,7 +220,20 @@ export async function renderShifts(container, user) {
 
       startBtn.addEventListener("click", async () => {
         errorEl.hidden = true;
+        const raw = input.value;
+        const amount = Number(raw);
+        if (raw === "" || !Number.isFinite(amount) || amount < 0) {
+          errorEl.textContent = "Enter a valid opening cash amount.";
+          errorEl.hidden = false;
+          return;
+        }
+        if (Math.abs(amount * 100 - Math.round(amount * 100)) > 0.000001) {
+          errorEl.textContent = "Opening cash can have at most 2 decimal places.";
+          errorEl.hidden = false;
+          return;
+        }
         startBtn.disabled = true;
+        startBtn.textContent = "Starting...";
         try {
           await api.openShift(user, input.value);
           showToast("Shift started.");
@@ -178,6 +242,7 @@ export async function renderShifts(container, user) {
           errorEl.textContent = err.message || "Could not start the shift.";
           errorEl.hidden = false;
           startBtn.disabled = false;
+          startBtn.textContent = "Start Shift";
         }
       });
     }
@@ -244,7 +309,12 @@ export async function renderShifts(container, user) {
       input.addEventListener("input", () => {
         errorEl.hidden = true;
         const raw = input.value;
-        const valid = raw !== "" && Number.isFinite(Number(raw)) && Number(raw) >= 0;
+        const amount = Number(raw);
+        const valid =
+          raw !== "" &&
+          Number.isFinite(amount) &&
+          amount >= 0 &&
+          Math.abs(amount * 100 - Math.round(amount * 100)) <= 0.000001;
         closeBtn.disabled = !valid;
 
         if (!valid) {
@@ -261,6 +331,7 @@ export async function renderShifts(container, user) {
 
       closeBtn.addEventListener("click", async () => {
         closeBtn.disabled = true;
+        closeBtn.textContent = "Closing...";
         try {
           await api.closeShift(user, input.value);
           showToast("Shift closed.");
@@ -269,6 +340,7 @@ export async function renderShifts(container, user) {
           errorEl.textContent = err.message || "Could not close the shift.";
           errorEl.hidden = false;
           closeBtn.disabled = false;
+          closeBtn.textContent = "Close Shift";
         }
       });
     }

@@ -361,9 +361,12 @@ def get_transaction(transaction_id, requester_user_id):
 
     transaction = fetch_one(
         """
-        SELECT *
-        FROM transactions
-        WHERE transaction_id = %s
+        SELECT t.*, u.full_name AS processed_by_name,
+               pm.method_name AS payment_method_name
+        FROM transactions t
+        JOIN users u ON u.user_id = t.processed_by_user_id
+        JOIN payment_methods pm ON pm.payment_method_id = t.payment_method_id
+        WHERE t.transaction_id = %s
         """,
         (transaction_id,),
     )
@@ -379,7 +382,7 @@ def get_transaction(transaction_id, requester_user_id):
 
     transaction["items"] = fetch_all(
         """
-        SELECT ti.*, p.name AS product_name
+        SELECT ti.*, p.name AS product_name, p.sku
         FROM transaction_items ti
         JOIN products p ON p.product_id = ti.product_id
         WHERE ti.transaction_id = %s
@@ -415,29 +418,32 @@ def list_transactions(
         raise DatabaseError("Active account required.", 403)
 
     query = """
-        SELECT *
-        FROM transactions
-        WHERE date_time >= %s
-          AND date_time < %s
+        SELECT t.*, u.full_name AS processed_by_name,
+               pm.method_name AS payment_method_name
+        FROM transactions t
+        JOIN users u ON u.user_id = t.processed_by_user_id
+        JOIN payment_methods pm ON pm.payment_method_id = t.payment_method_id
+        WHERE t.date_time >= %s
+          AND t.date_time < %s
     """
     params = [start, end_exclusive]
 
     if user["role"] != "Admin":
-        query += " AND processed_by_user_id = %s"
+        query += " AND t.processed_by_user_id = %s"
         params.append(requester_user_id)
 
     if status is not None:
         if status not in ("Completed", "Voided", "Refunded"):
             raise DatabaseError("Invalid transaction status.", 400)
 
-        query += " AND status = %s"
+        query += " AND t.status = %s"
         params.append(status)
 
     if order_type is not None:
         if order_type not in ("Dine-In", "Take-Out"):
             raise DatabaseError("Invalid order type.", 400)
 
-        query += " AND order_type = %s"
+        query += " AND t.order_type = %s"
         params.append(order_type)
 
     if customer_name is not None:
@@ -446,14 +452,14 @@ def list_transactions(
         if customer_name:
             query += """
                 AND (
-                    customer_name LIKE %s
-                    OR customer_contact LIKE %s
+                    t.customer_name LIKE %s
+                    OR t.customer_contact LIKE %s
                 )
             """
             search_value = f"%{customer_name}%"
             params.extend([search_value, search_value])
 
-    query += " ORDER BY date_time DESC, transaction_id DESC"
+    query += " ORDER BY t.date_time DESC, t.transaction_id DESC"
 
     return fetch_all(query, tuple(params))
 

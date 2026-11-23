@@ -73,6 +73,37 @@ const getDiscountLabel = (transaction) => {
   return rate > 0 ? `Discount (${type} - ${rate}%)` : `Discount (${type})`;
 };
 
+const printHtml = (title, body) => {
+  const printWindow = window.open("", "_blank", "width=480,height=700");
+  if (!printWindow) throw new Error("Allow pop-ups to print.");
+  printWindow.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>${escapeHTML(title)}</title>
+        <style>
+          body { width: 280px; margin: 0 auto; font: 12px monospace; color: #000; line-height: 1.35; }
+          h1, h2, p { margin: 4px 0; text-align: center; }
+          h1 { font-size: 18px; }
+          h2 { font-size: 14px; }
+          table { width: 100%; border-collapse: collapse; }
+          td { padding: 4px 0; vertical-align: top; }
+          td:last-child { text-align: right; white-space: nowrap; }
+          .meta { border-top: 1px dashed #000; border-bottom: 1px dashed #000; margin: 8px 0; padding: 6px 0; }
+          .line { display: flex; justify-content: space-between; gap: 12px; text-align: left; }
+          .total { border-top: 1px dashed #000; margin-top: 8px; padding-top: 8px; font-size: 14px; }
+          .items { border-bottom: 1px dashed #000; margin: 8px 0; }
+          @media print { @page { margin: 4mm; } }
+        </style>
+      </head>
+      <body>${body}</body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => printWindow.print(), 250);
+};
+
 // ---------- REQUEST SUCCESS POPUP ----------
 
 // ---------- REQUEST SUCCESS POPUP ----------
@@ -483,6 +514,11 @@ function showTransactionDetails(transaction, user, container) {
           </div>
         </div>
 
+        <div class="transaction-print-actions">
+          <button type="button" class="btn btn--soft" id="print-kitchen-ticket">Print Kitchen Ticket</button>
+          <button type="button" class="btn btn--soft" id="print-transaction-receipt">Print Receipt</button>
+        </div>
+
                     ${user.role === "Admin" && !reversed && requestStatus !== "pending" ? adminActionsHTML : requestContent}
       </div>
     `;
@@ -491,6 +527,66 @@ function showTransactionDetails(transaction, user, container) {
     title: "Transaction Details",
     content,
     size: "large",
+  });
+
+  const kitchenButton = modal?.element?.querySelector("#print-kitchen-ticket");
+  const receiptButton = modal?.element?.querySelector("#print-transaction-receipt");
+
+  kitchenButton?.addEventListener("click", async () => {
+    kitchenButton.disabled = true;
+    try {
+      const ticket = await api.getKitchenTicket(transaction.transactionId);
+      const items = (ticket.items || [])
+        .map(
+          (item) =>
+            `<tr><td>${escapeHTML(item.product_name)} x${escapeHTML(item.quantity)}</td></tr>`,
+        )
+        .join("");
+      printHtml("Kitchen Ticket", `
+        <h1>LECHON DE JAY</h1>
+        <h2>KITCHEN TICKET</h2>
+        <div class="meta">
+          <p>Order# ${escapeHTML(ticket.order_number)}</p>
+          <p>${escapeHTML(ticket.order_type)}</p>
+        </div>
+        <table class="items">${items}</table>
+      `);
+    } catch (error) {
+      window.alert(error.message || "Could not print the kitchen ticket.");
+    } finally {
+      kitchenButton.disabled = false;
+    }
+  });
+
+  receiptButton?.addEventListener("click", async () => {
+    receiptButton.disabled = true;
+    try {
+      const receipt = await api.getTransactionReceipt(transaction.transactionId);
+      const items = (receipt.items || [])
+        .map(
+          (item) =>
+            `<tr><td>${escapeHTML(item.product_name)} x${escapeHTML(item.quantity)}</td><td>${formatCurrency(item.line_total)}</td></tr>`,
+        )
+        .join("");
+      printHtml("Transaction Receipt", `
+        <h1>LECHON DE JAY</h1>
+        <h2>Transaction Receipt</h2>
+        <div class="meta">
+          <p>Order# ${escapeHTML(receipt.order_number)}</p>
+          <p>Transaction# ${escapeHTML(receipt.transaction_id)}</p>
+        </div>
+        <table class="items">${items}</table>
+        <p class="line">Subtotal <strong>${formatCurrency(receipt.subtotal)}</strong></p>
+        <p class="line">Discount <strong>${formatCurrency(receipt.discount_amount)}</strong></p>
+        <p class="line total"><strong>Total</strong><strong>${formatCurrency(receipt.total_due)}</strong></p>
+        <p class="line">Amount Tendered <strong>${formatCurrency(receipt.amount)}</strong></p>
+        <p class="line">Change <strong>${formatCurrency(Number(receipt.amount || 0) - Number(receipt.total_due || 0))}</strong></p>
+      `);
+    } catch (error) {
+      window.alert(error.message || "Could not print the receipt.");
+    } finally {
+      receiptButton.disabled = false;
+    }
   });
 
   if (reversed || requestStatus === "pending") return;
