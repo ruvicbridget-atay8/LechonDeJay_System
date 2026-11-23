@@ -250,7 +250,7 @@ def checkout(
                 raise DatabaseError("Noncash payment must equal total due.", 400)
             change = Decimal("0.00")
 
-        order_number = datetime.now().strftime("%y%m%d") + uuid4().hex[:12].upper()
+        order_number = datetime.now().strftime("%y%m%d") + "-" + uuid4().hex[:6].upper()
 
         cursor.execute(
             """

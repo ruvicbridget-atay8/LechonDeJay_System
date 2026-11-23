@@ -263,6 +263,7 @@ function mapProduct(product) {
   return {
     ...rest,
     id: numeric(id),
+    productId: numeric(id),
     categoryId: numeric(categoryId),
     category,
     price: numeric(product.price),
@@ -510,13 +511,6 @@ export async function getCategories() {
   }));
 }
 
-// ---------- Order and Transaction Numbers ----------
-let nextNumber = 201;
-
-export function peekOrderNumbers() {
-  return { transactionNo: nextNumber, orderNo: nextNumber };
-}
-
 // ---------- Discount Settings ----------
 const DISCOUNT_TYPES = [
   { name: "Regular", value: 0, requiresId: false, active: true },
@@ -528,6 +522,21 @@ const DISCOUNT_TYPES = [
 
 export async function getDiscountTypes() {
   return DISCOUNT_TYPES.map((discount) => ({ ...discount }));
+}
+
+export async function getCheckoutDiscountTypes() {
+  const data = await inventoryRequest("/discounts");
+  if (!Array.isArray(data.discounts)) {
+    throw new Error("The server returned an invalid discount list.");
+  }
+
+  return data.discounts.map((discount) => ({
+    id: numeric(discount.discount_type_id),
+    name: discount.discount_name,
+    value: numeric(discount.discount_value),
+    requiresId: ["Senior Citizen", "PWD"].includes(discount.discount_name),
+    active: true,
+  }));
 }
 
 export async function updateDiscountType(name, updates) {
@@ -587,110 +596,73 @@ const STOCK_MOVEMENTS = [
   },
 ];
 
-// ---------- Save Transaction ----------
+// ---------- POS Checkout ----------
+const PAYMENT_METHOD_IDS = {
+  Cash: 1,
+  "GCash/E-Wallet": 2,
+  Card: 3,
+};
+
 export async function saveTransaction(order) {
   if (!order || !Array.isArray(order.items) || !order.items.length) {
     throw new Error("The transaction has no items.");
   }
 
-  // Validate all items before changing stock.
-  for (const line of order.items) {
-    const product = PRODUCTS.find((p) => p.sku === line.sku);
-    const quantity = Number(line.qty);
-
-    if (!product) {
-      throw new Error(`Product ${line.sku} was not found.`);
-    }
-
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      throw new Error(`Invalid quantity for ${product.name}.`);
-    }
-
-    if (product.status === "Archived") {
-      throw new Error(`${product.name} is archived and cannot be sold.`);
-    }
-
-    if (quantity > Number(product.stock)) {
-      throw new Error(
-        `Insufficient stock for ${product.name}. Available: ${product.stock}.`,
-      );
-    }
+  const paymentMethodId = PAYMENT_METHOD_IDS[order.paymentMethod];
+  if (!paymentMethodId) {
+    throw new Error("Select a valid payment method.");
   }
 
-  const id = nextNumber++;
-  const now = new Date().toISOString();
-
-  // Save item prices and line totals for the transaction receipt.
-  const savedItems = order.items.map((line) => {
-    const product = PRODUCTS.find((p) => p.sku === line.sku);
-    const quantity = Number(line.qty);
-    const price = Number(line.price ?? line.unitPrice ?? product.price);
-
-    return {
-      ...line,
-      sku: product.sku,
-      name: line.name || product.name,
-      qty: quantity,
-      price,
-      lineTotal: Number(line.lineTotal ?? line.subtotal ?? price * quantity),
-    };
-  });
-
-  const amountReceived = Number(
-    order.amountTendered ??
-      order.amountReceived ??
-      order.cashReceived ??
-      order.amountPaid ??
-      order.received ??
-      0,
-  );
-
-  const record = {
-    ...order,
-    items: savedItems,
-    transactionId: id,
-    orderNumber: id,
-    dateTime: now,
-    status: "Completed",
-    requestType: "",
-    requestReason: "",
-    requestStatus: "None",
-    voidRefundReason: "",
-    itemName: savedItems.map((i) => `${i.qty}x ${i.name}`).join(", "),
-    paymentMethod:
-      order.paymentMethod || order.payment || order.paymentType || "—",
-    amountReceived,
-    change: Number(
-      order.change ??
-        order.changeAmount ??
-        Math.max(0, amountReceived - Number(order.total || 0)),
-    ),
+  const payload = {
+    cart_items: order.items.map((item) => ({
+      product_id: Number(item.productId),
+      quantity: Number(item.qty),
+      is_addon: Boolean(item.isAddon),
+      parent_line_no:
+        item.parentId == null
+          ? null
+          : order.items.findIndex((parent) => parent.id === item.parentId) + 1,
+    })),
+    order_type: order.orderType === "Dine In" ? "Dine-In" : "Take-Out",
+    discount_type_id: Number(order.discountTypeId),
+    payment_method_id: paymentMethodId,
+    amount_tendered: Number(order.amountTendered),
+    discount_amount: Number(order.discountAmount),
+    discount_id_number: order.discountId || null,
+    discount_name: order.discountName || null,
+    customer_name: order.customerName || null,
+    customer_contact: order.customerContact || null,
   };
-
-  // Deduct stock and record stock movements.
-  savedItems.forEach((line) => {
-    const product = PRODUCTS.find((p) => p.sku === line.sku);
-
-    product.stock = Number(product.stock) - Number(line.qty);
-
-    if (product.stock <= 0) {
-      product.stock = 0;
-      product.status = "Unavailable";
-    }
-
-    STOCK_MOVEMENTS.unshift({
-      movementType: "Stock Out",
-      sku: line.sku,
-      quantity: -Number(line.qty),
-      reason: "Sale",
-      dateTime: now,
-      staff: order.staff || "Cashier",
-    });
+  const response = await inventoryRequest("/transactions/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 
-  TRANSACTIONS.unshift(record);
+  const transactionId = numeric(response.data?.transaction_id);
+  const orderNumber = response.data?.order_number;
+  if (
+    response.success !== true ||
+    !response.data ||
+    !Number.isInteger(transactionId) ||
+    transactionId < 1 ||
+    typeof orderNumber !== "string" ||
+    !orderNumber.trim()
+  ) {
+    throw new Error(
+      response.message || "The server returned an invalid checkout response.",
+    );
+  }
 
-  return { ...record, items: record.items.map((item) => ({ ...item })) };
+  return {
+    transactionId,
+    orderNumber,
+    subtotal: numeric(response.data.subtotal),
+    discountAmount: numeric(response.data.discount_amount),
+    totalDue: numeric(response.data.total_due),
+    amountTendered: numeric(response.data.amount_tendered),
+    change: numeric(response.data.change),
+  };
 }
 
 // ---------- Get Transactions ----------

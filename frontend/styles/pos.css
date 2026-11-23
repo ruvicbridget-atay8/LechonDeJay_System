@@ -67,6 +67,14 @@
   border-color: var(--red);
   box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
 }
+.product:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.product:disabled:hover {
+  border-color: var(--line);
+  box-shadow: none;
+}
 .product-img {
   width: 100%;
   aspect-ratio: 4 / 3;

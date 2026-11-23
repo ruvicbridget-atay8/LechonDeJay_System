@@ -1,3 +1,4 @@
+import re
 from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
@@ -172,6 +173,7 @@ def test_checkout_cash_and_stock_out(transaction, monkeypatch):
     assert result["total_due"] == "200.00"
     assert result["change"] == "50.00"
     assert result["status"] == "Completed"
+    assert re.fullmatch(r"\d{6}-[A-F0-9]{6}", result["order_number"])
     assert len(movements) == 1
     assert movements[0] == (cursor, 1, 5, "Stock Out", Decimal("2"), "Sale")
     assert any("INSERT INTO transactions" in sql for sql, _ in cursor.executed)

@@ -74,6 +74,9 @@ export const getChange = () =>
 export function checkoutErrors() {
   const errs = {};
   const type = discountTypes.find((d) => d.name === checkout.discountType);
+  if (!type || !Number.isInteger(Number(type.id))) {
+    errs.discountType = "Select a valid discount type.";
+  }
   if (type && type.requiresId) {
     if (!checkout.discountId.trim()) errs.discountId = "Required";
     if (!checkout.discountName.trim()) errs.discountName = "Required";
@@ -94,6 +97,8 @@ export function buildOrder(user) {
     staff: user.name,
     orderType,
     items: cart.map((l) => ({
+      id: l.id,
+      productId: l.productId,
       sku: l.sku,
       name: l.name,
       qty: l.qty,
@@ -101,6 +106,7 @@ export function buildOrder(user) {
       isAddon: l.isAddon,
       parentId: l.parentId,
     })),
+    discountTypeId: discountTypes.find((d) => d.name === checkout.discountType)?.id,
     subtotal: getSubtotal(),
     discountType: checkout.discountType,
     discountRate: getDiscountRate(),
@@ -123,7 +129,10 @@ export function resetOrder() {
   checkout = emptyCheckout();
 }
 // Popup shown after the order is saved. onClose runs when the Cashier taps OK.
-function showOrderPlaced({ orderNo, total, change }, onClose) {
+function showOrderPlaced(
+  { orderNo, subtotal, discountAmount, total, amountTendered, change },
+  onClose,
+) {
   const overlay = document.createElement("div");
   overlay.className = "popup-overlay";
   overlay.innerHTML = `
@@ -131,7 +140,10 @@ function showOrderPlaced({ orderNo, total, change }, onClose) {
       <i class="bi bi-check-circle-fill popup-icon"></i>
       <h2 id="popup-title">Order Placed</h2>
       <p>Order# ${esc(orderNo)}</p>
+      <p>Subtotal: <strong>${peso(subtotal)}</strong></p>
+      <p>Discount: <strong>-${peso(discountAmount)}</strong></p>
       <p>Total: <strong>${peso(total)}</strong></p>
+      <p>Amount Tendered: <strong>${peso(amountTendered)}</strong></p>
       ${change > 0 ? `<p>Change: <strong>${peso(change)}</strong></p>` : ""}
       <button class="btn btn--primary btn--block" type="button">OK</button>
     </div>`;
@@ -151,7 +163,7 @@ export async function renderPos(container, user) {
   try {
     [products, types] = await Promise.all([
       api.getCatalog(),
-      api.getDiscountTypes(),
+      api.getCheckoutDiscountTypes(),
     ]);
   } catch (error) {
     container.innerHTML = `
@@ -161,8 +173,6 @@ export async function renderPos(container, user) {
     return;
   }
   discountTypes = types.filter((t) => t.active);
-
-  const { transactionNo, orderNo } = api.peekOrderNumbers();
 
   container.innerHTML = `
     <div class="pos">
@@ -184,8 +194,6 @@ export async function renderPos(container, user) {
         <div class="cart-head">
           <div>
             <h2>Invoice</h2>
-            <p>Transaction# ${transactionNo}</p>
-            <p>Order# ${orderNo}</p>
           </div>
           <span class="cart-time" id="cart-time"></span>
         </div>
@@ -303,12 +311,13 @@ export async function renderPos(container, user) {
     grid.innerHTML = list
       .map(
         (p) => `
-      <button class="product" type="button" data-sku="${esc(p.sku)}">
+      <button class="product${Number(p.stock) <= 0 ? " product--unavailable" : ""}" type="button" data-sku="${esc(p.sku)}" ${Number(p.stock) <= 0 ? "disabled" : ""}>
         <div class="product-img"><i class="bi bi-image"></i></div>
         <div class="product-info">
           <span class="product-name">${esc(p.name)}</span>
           ${p.isAddon ? '<span class="status-chip status-warning">Add-on</span>' : ""}
           <span class="product-price">${peso(p.price)}</span>
+          ${Number(p.stock) <= 0 ? '<span class="status-chip status-danger">Out of stock</span>' : ""}
         </div>
       </button>`,
       )
@@ -322,6 +331,7 @@ export async function renderPos(container, user) {
   }
 
   function addToCart(product) {
+    if (!product || Number(product.stock) <= 0) return;
     showNotice("");
 
     const same = cart.find((line) => line.sku === product.sku);
@@ -330,6 +340,7 @@ export async function renderPos(container, user) {
     } else {
       cart.push({
         id: lineCounter++,
+        productId: product.productId,
         sku: product.sku,
         name: product.name,
         price: product.price,
@@ -488,9 +499,17 @@ export async function renderPos(container, user) {
     }
 
     placeBtn.disabled = true;
+    placeBtn.textContent = "Saving...";
     try {
-      await api.saveTransaction(buildOrder(user));
-      const summary = { orderNo, total: getTotal(), change: getChange() };
+      const saved = await api.saveTransaction(buildOrder(user));
+      const summary = {
+        orderNo: saved.orderNumber,
+        subtotal: saved.subtotal,
+        discountAmount: saved.discountAmount,
+        total: saved.totalDue,
+        amountTendered: saved.amountTendered,
+        change: saved.change,
+      };
       resetOrder();
       showOrderPlaced(summary, () => {
         location.hash = "#/transactions";
@@ -500,6 +519,7 @@ export async function renderPos(container, user) {
         err.message || "Could not save the order. Try again.";
       errorEl.hidden = false;
       placeBtn.disabled = false;
+      placeBtn.textContent = "Place Order";
     }
   }
   /* ---------- Events ---------- */
@@ -520,7 +540,7 @@ export async function renderPos(container, user) {
 
   grid.addEventListener("click", (e) => {
     const card = e.target.closest(".product");
-    if (!card) return;
+    if (!card || card.disabled) return;
     addToCart(products.find((p) => p.sku === card.dataset.sku));
   });
 
