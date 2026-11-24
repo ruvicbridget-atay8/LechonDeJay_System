@@ -214,6 +214,55 @@ export async function renderReports(container, user) {
     let customStart = "";
     let customEnd = "";
     let categoryFilter = "All";
+    const staffCashReportCache = new Map();
+    const staffCashReportErrors = new Map();
+    const staffCashReportRequests = new Map();
+
+    const staffCashReportRangeKey = (range) =>
+      range.start && range.end
+        ? `${dateKey(range.start)}:${dateKey(range.end)}`
+        : null;
+
+    const getStaffCashReportForRange = (range) => {
+      const key = staffCashReportRangeKey(range);
+      if (!key) return null;
+      if (staffCashReportCache.has(key)) return staffCashReportCache.get(key);
+      if (staffCashReportErrors.has(key)) return null;
+
+      if (!staffCashReportRequests.has(key)) {
+        const startDate = dateKey(range.start);
+        const endDate = dateKey(range.end);
+        const request = api
+          .getStaffCashReport(startDate, endDate)
+          .then((staffCashReport) => {
+            staffCashReportCache.set(key, staffCashReport);
+            staffCashReportErrors.delete(key);
+          })
+          .catch((error) => {
+            staffCashReportErrors.set(
+              key,
+              error.message || "Unable to load cashier order counts.",
+            );
+          })
+          .finally(() => {
+            staffCashReportRequests.delete(key);
+            const activeRange = getRange(
+              rangeMode,
+              customStart,
+              customEnd,
+            );
+            if (
+              currentPage === "staff" &&
+              staffCashReportRangeKey(activeRange) === key
+            ) {
+              render();
+            }
+          });
+        staffCashReportRequests.set(key, request);
+      }
+
+      return null;
+    };
 
     const activeProducts = allProducts.filter(
       (product) =>
@@ -855,6 +904,11 @@ export async function renderReports(container, user) {
       const filteredShifts = allShifts.filter((shift) =>
         inRange(safeDate(shift.shiftDate), range)
       );
+      const staffCashReport = getStaffCashReportForRange(range);
+      const reportKey = staffCashReportRangeKey(range);
+      const staffCashReportError = reportKey
+        ? staffCashReportErrors.get(reportKey)
+        : null;
 
       const flagged = filteredShifts.filter(
         (shift) =>
@@ -891,6 +945,7 @@ export async function renderReports(container, user) {
 
         <section class="reports-panel">
           <h2>Shift Reconciliation</h2>
+          ${staffCashReportError ? `<p class="alert" role="alert">${escapeHTML(staffCashReportError)}</p>` : ""}
           <div class="table-responsive">
             <table class="data-table">
               <thead>
@@ -912,12 +967,22 @@ export async function renderReports(container, user) {
                       const variance = Number(shift.cashDifference || 0);
                       const closed = shift.status === "Closed";
                       const review = closed && Math.abs(variance) > 0.009;
+                      const shiftCashRow = staffCashReport?.shiftCash.find(
+                        (row) => Number(row.shift_id) === shift.shiftId,
+                      );
+                      const cashierSalesRow = staffCashReport?.cashierSales.find(
+                        (row) => row.full_name === shift.staff,
+                      );
+                      const orderCount =
+                        shiftCashRow?.transaction_count ??
+                        shift.salesCount ??
+                        cashierSalesRow?.transaction_count;
 
                       return `
                         <tr>
                           <td><strong>${escapeHTML(shift.staff || "—")}</strong></td>
                           <td>${formatDate(safeDate(shift.shiftDate))}</td>
-                          <td>${number(shift.salesCount)}</td>
+                          <td>${orderCount == null ? "—" : number(orderCount)}</td>
                           <td>${peso(shift.cashSales)}</td>
                           <td>${peso(shift.expectedCash)}</td>
                           <td>${shift.actualCash == null ? "—" : peso(shift.actualCash)}</td>

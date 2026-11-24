@@ -10,7 +10,7 @@ export async function renderDiscounts(container, user) {
   `;
 
   try {
-    let discounts = await api.getDiscountTypes();
+    let discounts = await api.getDiscountSettings();
 
     function displayDiscounts() {
       container.innerHTML = `
@@ -126,14 +126,18 @@ export async function renderDiscounts(container, user) {
             return;
           }
 
+          if (discount.name === "Regular" && value !== 0) {
+            feedback.textContent = "The Regular discount must remain at 0%.";
+            feedback.className = "discount-feedback error";
+            input.focus();
+            return;
+          }
+
           button.disabled = true;
           button.textContent = "Saving...";
 
           try {
-            const updated = await api.updateDiscountType(
-              discount.name,
-              { value }
-            );
+            const updated = await api.saveDiscountPercentage(discount, value);
 
             discounts[index] = updated;
 

@@ -70,13 +70,17 @@ async function printTransaction(transactionId, kind) {
   if (kind === "kitchen") {
     const ticket = await api.getKitchenTicket(transactionId);
     const items = (ticket.items || [])
-      .map((item) => `
+      .map(
+        (item) => `
         <tr>
           <td>${esc(item.product_name)} x${esc(item.quantity)}</td>
         </tr>
-      `)
+      `,
+      )
       .join("");
-    printDocument("Kitchen Ticket", `
+    printDocument(
+      "Kitchen Ticket",
+      `
       <h1>LECHON DE JAY</h1>
       <h2>KITCHEN TICKET</h2>
       <div class="meta">
@@ -84,20 +88,25 @@ async function printTransaction(transactionId, kind) {
         <p>${esc(ticket.order_type)}</p>
       </div>
       <table class="items">${items}</table>
-    `);
+    `,
+    );
     return;
   }
 
   const receipt = await api.getTransactionReceipt(transactionId);
   const items = (receipt.items || [])
-    .map((item) => `
+    .map(
+      (item) => `
       <tr>
         <td>${esc(item.product_name)} x${esc(item.quantity)}</td>
         <td>${peso(item.line_total)}</td>
       </tr>
-    `)
+    `,
+    )
     .join("");
-  printDocument("Transaction Receipt", `
+  printDocument(
+    "Transaction Receipt",
+    `
     <h1>LECHON DE JAY</h1>
     <h2>Transaction Receipt</h2>
     <div class="meta">
@@ -110,7 +119,8 @@ async function printTransaction(transactionId, kind) {
     <p class="line total"><strong>Total</strong><strong>${peso(receipt.total_due)}</strong></p>
     <p class="line">Amount Tendered <strong>${peso(receipt.amount)}</strong></p>
     <p class="line">Change <strong>${peso(receipt.amount - receipt.total_due)}</strong></p>
-  `);
+  `,
+  );
 }
 
 /* ---------- Order state (kept while the user moves between pages) ---------- */
@@ -185,7 +195,8 @@ export function buildOrder(user) {
       isAddon: l.isAddon,
       parentId: l.parentId,
     })),
-    discountTypeId: discountTypes.find((d) => d.name === checkout.discountType)?.id,
+    discountTypeId: discountTypes.find((d) => d.name === checkout.discountType)
+      ?.id,
     subtotal: getSubtotal(),
     discountType: checkout.discountType,
     discountRate: getDiscountRate(),
@@ -209,7 +220,15 @@ export function resetOrder() {
 }
 // Popup shown after the order is saved. onClose runs when the Cashier taps OK.
 function showOrderPlaced(
-  { transactionId, orderNo, subtotal, discountAmount, total, amountTendered, change },
+  {
+    transactionId,
+    orderNo,
+    subtotal,
+    discountAmount,
+    total,
+    amountTendered,
+    change,
+  },
   onClose,
 ) {
   const overlay = document.createElement("div");
@@ -226,32 +245,36 @@ function showOrderPlaced(
       ${change > 0 ? `<p>Change: <strong>${peso(change)}</strong></p>` : ""}
       <button class="btn btn--soft btn--block" id="print-kitchen-ticket" type="button">Print Kitchen Ticket</button>
       <button class="btn btn--soft btn--block" id="print-receipt" type="button">Print Receipt</button>
-      <button class="btn btn--primary btn--block" type="button">OK</button>
+      <button class="btn btn--primary btn--block" id="order-placed-ok" type="button">OK</button>
     </div>`;
   document.body.appendChild(overlay);
 
-  overlay.querySelector("#print-kitchen-ticket").addEventListener("click", async (event) => {
-    event.currentTarget.disabled = true;
-    try {
-      await printTransaction(transactionId, "kitchen");
-    } catch (error) {
-      window.alert(error.message || "Could not print the kitchen ticket.");
-    } finally {
-      event.currentTarget.disabled = false;
-    }
-  });
-  overlay.querySelector("#print-receipt").addEventListener("click", async (event) => {
-    event.currentTarget.disabled = true;
-    try {
-      await printTransaction(transactionId, "receipt");
-    } catch (error) {
-      window.alert(error.message || "Could not print the receipt.");
-    } finally {
-      event.currentTarget.disabled = false;
-    }
-  });
+  overlay
+    .querySelector("#print-kitchen-ticket")
+    .addEventListener("click", async (event) => {
+      event.currentTarget.disabled = true;
+      try {
+        await printTransaction(transactionId, "kitchen");
+      } catch (error) {
+        window.alert(error.message || "Could not print the kitchen ticket.");
+      } finally {
+        event.currentTarget.disabled = false;
+      }
+    });
+  overlay
+    .querySelector("#print-receipt")
+    .addEventListener("click", async (event) => {
+      event.currentTarget.disabled = true;
+      try {
+        await printTransaction(transactionId, "receipt");
+      } catch (error) {
+        window.alert(error.message || "Could not print the receipt.");
+      } finally {
+        event.currentTarget.disabled = false;
+      }
+    });
 
-  const okBtn = overlay.querySelector("button");
+  const okBtn = overlay.querySelector("#order-placed-ok");
   okBtn.focus();
   okBtn.addEventListener("click", () => {
     overlay.remove();

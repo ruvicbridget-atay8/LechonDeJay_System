@@ -71,7 +71,7 @@ def test_open_shift_service_validation_error(client):
 
 
 def test_current_shift_only_returns_own_shift(client):
-    shift = {"shift_id": 8, "user_id": 1}
+    shift = {"shift_id": 8, "user_id": 1, "sales_count": 2}
     with login(client, role="Admin"), patch(
         "app.routes.shifts.shift_service.get_open_shift",
         return_value=shift,
@@ -79,6 +79,7 @@ def test_current_shift_only_returns_own_shift(client):
         response = client.get("/shifts/current")
     assert response.status_code == 200
     assert response.json["data"]["shift_id"] == 8
+    assert response.json["data"]["sales_count"] == 2
     get_open_shift.assert_called_once_with(1)
 
 
@@ -121,9 +122,11 @@ def test_close_shift_bad_body_or_id(client):
 
 
 def test_list_shifts_passes_filters(client):
-    with login(client), patch("app.routes.shifts.shift_service.list_shifts", return_value=[]) as service:
+    shift = {"shift_id": 2, "sales_count": 1}
+    with login(client), patch("app.routes.shifts.shift_service.list_shifts", return_value=[shift]) as service:
         response = client.get("/shifts?status=Closed&start_date=2026-11-01&end_date=2026-11-30")
     assert response.status_code == 200
+    assert response.json["data"][0]["sales_count"] == 1
     service.assert_called_once_with(requester_user_id=1, start_date="2026-11-01", end_date="2026-11-30", status="Closed")
 
 

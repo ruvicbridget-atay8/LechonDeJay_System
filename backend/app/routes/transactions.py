@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, request, session
 
 from app.services import transaction_service
 from app.services import DatabaseError, role_required
+from .serialization import json_safe
 
 transactions_bp = Blueprint("transactions", __name__)
 
@@ -26,7 +27,15 @@ def valid_id(transaction_id):
 
 
 def respond(result, code=200):
-    return jsonify({"success": True, "data": result}), code
+    return (
+        jsonify(
+            json_safe(
+                {"success": True, "data": result},
+                datetime_separator="T",
+            )
+        ),
+        code,
+    )
 
 
 @transactions_bp.route("/transactions/calculate", methods=["POST"])

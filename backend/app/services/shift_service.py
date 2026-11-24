@@ -9,6 +9,19 @@ from app.services.database_service import (
 )
 
 MAX_MONEY = Decimal("99999999.99")
+_SHIFT_SALES_COUNT_SELECT = """
+    (
+        SELECT COUNT(t.transaction_id)
+        FROM transactions t
+        JOIN payment_methods pm
+            ON pm.payment_method_id = t.payment_method_id
+        WHERE t.processed_by_user_id = s.user_id
+          AND t.status = 'Completed'
+          AND pm.method_name = 'Cash'
+          AND t.date_time >= s.shift_date
+          AND t.date_time < s.shift_date + INTERVAL 1 DAY
+    ) AS sales_count
+"""
 
 
 def _validate_money(value, field_name):
@@ -237,9 +250,10 @@ def get_shift(shift_id, requester_user_id):
             403,
         )
 
-    query = """
+    query = f"""
         SELECT
             s.*,
+            {_SHIFT_SALES_COUNT_SELECT},
             u.full_name AS cashier_name
         FROM shifts s
         JOIN users u ON u.user_id = s.user_id
@@ -284,9 +298,10 @@ def list_shifts(
             403,
         )
 
-    query = """
+    query = f"""
         SELECT
             s.*,
+            {_SHIFT_SALES_COUNT_SELECT},
             u.full_name AS cashier_name
         FROM shifts s
         JOIN users u ON u.user_id = s.user_id
@@ -325,12 +340,12 @@ def list_shifts(
 def get_open_shift(user_id):
     """Return the cashier's latest open shift, if any."""
     return fetch_one(
-        """
-        SELECT *
-        FROM shifts
-        WHERE user_id = %s
-          AND actual_cash IS NULL
-        ORDER BY shift_date DESC, shift_id DESC
+        f"""
+        SELECT s.*, {_SHIFT_SALES_COUNT_SELECT}
+        FROM shifts s
+        WHERE s.user_id = %s
+          AND s.actual_cash IS NULL
+        ORDER BY s.shift_date DESC, s.shift_id DESC
         LIMIT 1
         """,
         (user_id,),

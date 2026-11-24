@@ -205,6 +205,12 @@ def test_shift_cash_report(mock_reports):
     _, query, params = report_query(mock_reports)
 
     assert "FROM shifts s" in query
+    assert "s.user_id" in query
+    assert "AS transaction_count" in query
+    assert "COUNT(t.transaction_id)" in query
+    assert "t.status = 'Completed'" in query
+    assert "pm.method_name = 'Cash'" in query
+    assert "t.date_time < s.shift_date + INTERVAL 1 DAY" in query
     assert "s.opening_cash" in query
     assert "s.cash_sales" in query
     assert "s.expected_cash" in query

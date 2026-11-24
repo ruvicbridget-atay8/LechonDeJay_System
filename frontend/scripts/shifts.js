@@ -117,7 +117,7 @@ export async function renderShifts(container, user) {
           render: (s) => `<i class="bi bi-calendar3"></i> ${escapeHTML(s.dateLabel)}`,
         },
         { key: "openingCash", label: "Opening Cash", render: (s) => formatCurrency(s.openingCash) },
-        { key: "salesCount", label: "No. of Sales", render: (s) => (isOpen(s) ? "—" : escapeHTML(s.salesCount)) },
+        { key: "salesCount", label: "No. of Sales", render: (s) => (s.salesCount == null ? "—" : escapeHTML(s.salesCount)) },
         { key: "cashSales", label: "Cash Sales", render: (s) => (isOpen(s) ? "—" : formatCurrency(s.cashSales)) },
         { key: "expectedCash", label: "Expected Cash", render: (s) => (isOpen(s) ? "—" : formatCurrency(s.expectedCash)) },
         { key: "actualCash", label: "Counted", render: (s) => (isOpen(s) ? "—" : formatCurrency(s.actualCash)) },

@@ -213,7 +213,7 @@ def test_list_shifts_cashier_filter(monkeypatch):
 
     def fake_fetch_all(query, params):
         calls.append((query, params))
-        return [{"shift_id": 10, "user_id": 1}]
+        return [{"shift_id": 10, "user_id": 1, "sales_count": 1}]
 
     monkeypatch.setattr(
         shift_service, "fetch_one", fake_fetch_one
@@ -230,7 +230,13 @@ def test_list_shifts_cashier_filter(monkeypatch):
     )
 
     assert len(result) == 1
+    assert result[0]["sales_count"] == 1
     query, params = calls[0]
+    assert "AS sales_count" in query
+    assert "COUNT(t.transaction_id)" in query
+    assert "t.status = 'Completed'" in query
+    assert "pm.method_name = 'Cash'" in query
+    assert "t.date_time < s.shift_date + INTERVAL 1 DAY" in query
     assert "s.user_id = %s" in query
     assert "s.actual_cash IS NULL" in query
     assert params == (
@@ -275,19 +281,28 @@ def test_get_shift_restricts_cashier(monkeypatch):
         shift_service.get_shift, 10, 2
     )
 
+    assert "AS sales_count" in calls[1][0]
+    assert "COUNT(t.transaction_id)" in calls[1][0]
     assert "s.user_id = %s" in calls[1][0]
     assert calls[1][1] == (10, 2)
 
 
 def test_get_open_shift(monkeypatch):
-    monkeypatch.setattr(
-        shift_service, "fetch_one",
-        lambda query, params: {
+    calls = []
+
+    def fake_fetch_one(query, params):
+        calls.append((query, params))
+        return {
             "shift_id": 10,
             "user_id": 1,
             "actual_cash": None,
-        },
-    )
+            "sales_count": 0,
+        }
+    monkeypatch.setattr(shift_service, "fetch_one", fake_fetch_one)
 
     result = shift_service.get_open_shift(1)
     assert result["shift_id"] == 10
+    assert result["sales_count"] == 0
+    assert "AS sales_count" in calls[0][0]
+    assert "COUNT(t.transaction_id)" in calls[0][0]
+    assert "pm.method_name = 'Cash'" in calls[0][0]

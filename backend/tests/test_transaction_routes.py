@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from datetime import datetime
 from unittest.mock import patch
 import pytest
 from flask import Flask, jsonify
@@ -67,6 +68,19 @@ def test_list_transactions_filters(client):
     assert mock.call_args.kwargs == {
         'requester_user_id': 1, 'start_date': '2026-11-01', 'end_date': '2026-11-19',
         'status': 'Completed', 'order_type': 'Take-Out', 'customer_name': 'Jay'}
+
+
+def test_list_transactions_serializes_local_timestamp(client):
+    row = {'transaction_id': 9, 'date_time': datetime(2026, 11, 24, 12, 9)}
+    with auth(client), patch(
+        'app.routes.transactions.transaction_service.list_transactions',
+        return_value=[row],
+    ):
+        response = client.get('/transactions')
+
+    assert response.status_code == 200
+    assert response.json['data'][0]['date_time'] == '2026-11-24T12:09:00'
+
 
 def test_get_transaction_resources(client):
     for url, service in (

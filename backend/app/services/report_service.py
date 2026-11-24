@@ -296,8 +296,20 @@ def get_shift_cash_report(
         """
         SELECT
             s.shift_id,
+            s.user_id,
             s.shift_date,
             u.full_name AS cashier_name,
+            (
+                SELECT COUNT(t.transaction_id)
+                FROM transactions t
+                JOIN payment_methods pm
+                    ON pm.payment_method_id = t.payment_method_id
+                WHERE t.processed_by_user_id = s.user_id
+                  AND t.status = 'Completed'
+                  AND pm.method_name = 'Cash'
+                  AND t.date_time >= s.shift_date
+                  AND t.date_time < s.shift_date + INTERVAL 1 DAY
+            ) AS transaction_count,
             s.opening_cash,
             s.cash_sales,
             s.expected_cash,

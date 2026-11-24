@@ -524,6 +524,52 @@ export async function getDiscountTypes() {
   return DISCOUNT_TYPES.map((discount) => ({ ...discount }));
 }
 
+export async function getDiscountSettings() {
+  const data = await inventoryRequest("/discounts");
+  if (!Array.isArray(data.discounts)) {
+    throw new Error("The server returned an invalid discount list.");
+  }
+
+  return data.discounts.map((discount) => ({
+    id: numeric(discount.discount_type_id),
+    name: discount.discount_name,
+    value: numeric(discount.discount_value),
+    requiresId: ["Senior Citizen", "PWD"].includes(discount.discount_name),
+    active: true,
+  }));
+}
+
+export async function saveDiscountPercentage(discount, value) {
+  if (
+    !discount ||
+    !Number.isInteger(Number(discount.id)) ||
+    Number(discount.id) < 1 ||
+    typeof discount.name !== "string"
+  ) {
+    throw new Error("Discount type not found.");
+  }
+  if (!Number.isFinite(value) || value < 0 || value > 100) {
+    throw new Error("Discount percentage must be between 0 and 100.");
+  }
+
+  const data = await inventoryRequest(
+    `/discounts/${encodeURIComponent(discount.id)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        discount_name: discount.name,
+        discount_value: value,
+      }),
+    },
+  );
+  if (data.success !== true) {
+    throw new Error(data.message || "Unable to save discount percentage.");
+  }
+
+  return { ...discount, value };
+}
+
 export async function getCheckoutDiscountTypes() {
   const data = await inventoryRequest("/discounts");
   if (!Array.isArray(data.discounts)) {
@@ -1112,7 +1158,8 @@ const mapShift = (shift) => {
     staff: shift.cashier_name || shift.full_name || "",
     shiftDate: normalizeShiftDate(shift.shift_date),
     openingCash,
-    salesCount: numeric(shift.sales_count) || 0,
+    salesCount:
+      shift.sales_count == null ? null : numeric(shift.sales_count),
     cashSales,
     expectedCash,
     actualCash,
@@ -1134,6 +1181,26 @@ export async function getShifts(_user, filters = {}) {
     throw new Error("The server returned an invalid shift list.");
   }
   return response.data.map(mapShift).filter(Boolean);
+}
+
+export async function getStaffCashReport(startDate, endDate) {
+  const params = new URLSearchParams({
+    start_date: startDate,
+    end_date: endDate,
+  });
+  const response = await inventoryRequest(
+    `/reports/staff-cash?${params.toString()}`,
+  );
+  if (
+    !Array.isArray(response.data?.cashier_sales) ||
+    !Array.isArray(response.data?.shift_cash)
+  ) {
+    throw new Error("The server returned an invalid staff cash report.");
+  }
+  return {
+    cashierSales: response.data.cashier_sales,
+    shiftCash: response.data.shift_cash,
+  };
 }
 
 export async function openShift(_user, openingCash) {
