@@ -34,6 +34,12 @@ const esc = (s) =>
   );
 
 const round2 = (n) => Math.round(n * 100) / 100;
+let cloudinaryCloudName = "";
+
+function productImageUrl(sku) {
+  if (!cloudinaryCloudName || !sku) return "";
+  return `https://res.cloudinary.com/${encodeURIComponent(cloudinaryCloudName)}/image/upload/f_auto,q_auto,w_400/lechon-de-jay/products/${encodeURIComponent(sku)}`;
+}
 
 function printDocument(title, bodyHTML) {
   const printWindow = window.open("", "_blank", "width=480,height=700");
@@ -287,9 +293,10 @@ export async function renderPos(container, user) {
   let products;
   let types;
   try {
-    [products, types] = await Promise.all([
+    [products, types, cloudinaryCloudName] = await Promise.all([
       api.getCatalog(),
       api.getCheckoutDiscountTypes(),
+      api.getCloudinaryConfig(),
     ]);
   } catch (error) {
     container.innerHTML = `
@@ -404,6 +411,22 @@ export async function renderPos(container, user) {
     </div>`;
 
   const grid = document.getElementById("pos-grid");
+  grid.addEventListener(
+    "error",
+    (event) => {
+      const image = event.target;
+      if (
+        !(image instanceof HTMLImageElement) ||
+        !image.classList.contains("product-photo")
+      ) {
+        return;
+      }
+      image.hidden = true;
+      const placeholder = image.nextElementSibling;
+      if (placeholder) placeholder.hidden = false;
+    },
+    true,
+  );
   const linesBox = document.getElementById("cart-lines");
   const notice = document.getElementById("cart-notice");
   const typeSelect = document.getElementById("cart-type");
@@ -438,7 +461,10 @@ export async function renderPos(container, user) {
       .map(
         (p) => `
       <button class="product${Number(p.stock) <= 0 ? " product--unavailable" : ""}" type="button" data-sku="${esc(p.sku)}" ${Number(p.stock) <= 0 ? "disabled" : ""}>
-        <div class="product-img"><i class="bi bi-image"></i></div>
+        <div class="product-img">
+          ${productImageUrl(p.sku) ? `<img class="product-photo" src="${esc(productImageUrl(p.sku))}" alt="${esc(p.name)}" />` : ""}
+          <i class="bi bi-image product-image-placeholder" ${productImageUrl(p.sku) ? "hidden" : ""}></i>
+        </div>
         <div class="product-info">
           <span class="product-name">${esc(p.name)}</span>
           ${p.isAddon ? '<span class="status-chip status-warning">Add-on</span>' : ""}
@@ -448,6 +474,7 @@ export async function renderPos(container, user) {
       </button>`,
       )
       .join("");
+
   }
 
   /* ---------- Cart ---------- */

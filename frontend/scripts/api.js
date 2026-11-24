@@ -357,6 +357,41 @@ export async function getCatalog() {
   return data.products.map(mapProduct);
 }
 
+export async function getCloudinaryConfig() {
+  const data = await inventoryRequest("/inventory/config");
+  return String(data.data?.cloud_name || "");
+}
+
+export async function uploadProductImage(productId, file) {
+  const formData = new FormData();
+  formData.append("image", file);
+
+  const response = await fetch(
+    `${API_BASE_URL}/inventory/products/${Number(productId)}/image`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+      body: formData,
+    },
+  );
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    // Keep the HTTP status authoritative for non-JSON responses.
+  }
+  if (response.status === 401) window.location.reload();
+  if (!response.ok) {
+    throw new Error(data?.message || `Image upload failed (${response.status}).`);
+  }
+  if (data?.success !== true || typeof data.data?.url !== "string") {
+    throw new Error("The server returned an invalid image upload response.");
+  }
+  return data.data;
+}
+
 export async function getLowStock() {
   const data = await inventoryRequest("/inventory/low-stock");
 

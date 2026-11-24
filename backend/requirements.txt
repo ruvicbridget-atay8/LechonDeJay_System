@@ -15,3 +15,4 @@ Pygments==2.21.0
 pytest==9.2.0
 python-dotenv==1.2.4
 Werkzeug==3.1.9
+cloudinary==1.47.0

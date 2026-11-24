@@ -883,6 +883,68 @@
 
 /* ===== TRANSACTION RECEIPT MODAL ===== */
 
+.inventory-product-image {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 42px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #f1f1f1;
+  color: #a0a0a0;
+}
+
+.inventory-product-image-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inventory-product-image-placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.inventory-product-image-placeholder[hidden] {
+  display: none;
+}
+
+.product-image-preview-wrap {
+  display: grid;
+  place-items: center;
+  width: 180px;
+  height: 130px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f1f1f1;
+  color: #a0a0a0;
+}
+
+.product-image-preview-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.product-image-preview-wrap img[hidden] {
+  display: none;
+}
+
+.product-image-placeholder {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.product-image-placeholder[hidden] {
+  display: none;
+}
+
 .transaction-receipt {
   color: #101828;
 }

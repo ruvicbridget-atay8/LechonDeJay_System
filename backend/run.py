@@ -1,5 +1,6 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import RequestEntityTooLarge
 from config import Config
 from app.services import DatabaseError, fetch_one
 from app.routes import (
@@ -16,6 +17,12 @@ from app.routes import (
 
 app = Flask(__name__)
 app.json.sort_keys = False
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 + 64 * 1024
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_upload_too_large(_error):
+    return jsonify({"success": False, "message": "Image must be 2 MB or smaller."}), 400
 
 @app.errorhandler(DatabaseError)
 def handle_database_error(error):

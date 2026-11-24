@@ -8,6 +8,13 @@ import {
   openModal,
 } from "./components.js";
 
+let cloudinaryCloudName = "";
+
+function productImageUrl(sku) {
+  if (!cloudinaryCloudName || !sku) return "";
+  return `https://res.cloudinary.com/${encodeURIComponent(cloudinaryCloudName)}/image/upload/f_auto,q_auto,w_400/lechon-de-jay/products/${encodeURIComponent(sku)}`;
+}
+
 // ---------- CUSTOM NOTIFICATION ----------
 function showInventoryNotice(title, message, type = "success") {
   const isError = type === "error";
@@ -185,6 +192,23 @@ function productFormContent(product = null, categories = []) {
             ${editing ? "disabled" : ""} />
         </div>
 
+        <div class="field product-image-field" style="grid-column:1/-1;">
+          <label for="product-image">Product Image (JPG, PNG, WebP; max 2 MB)</label>
+          <input class="input" id="product-image" name="image"
+            type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
+          <div class="product-image-preview-wrap">
+            <img id="product-image-preview"
+              src="${escapeHTML(productImageUrl(product?.sku || ""))}"
+              alt="${escapeHTML(product?.name || "Product image preview")}"
+              ${product?.sku && cloudinaryCloudName ? "" : "hidden"} />
+            <div class="product-image-placeholder" id="product-image-placeholder"
+              ${product?.sku && cloudinaryCloudName ? "hidden" : ""}>
+              <i class="bi bi-image" aria-hidden="true"></i>
+              <span>No product image</span>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <div id="whole-lechon-fields"
@@ -255,6 +279,26 @@ function renderProductModal(table, categories, product = null) {
   const paxInput = form.querySelector("#product-pax");
   const errorMessage = form.querySelector("#product-form-error");
   const saveButton = form.querySelector("#save-product");
+  const imageInput = form.querySelector("#product-image");
+  const imagePreview = form.querySelector("#product-image-preview");
+  const imagePlaceholder = form.querySelector("#product-image-placeholder");
+  let savedProductId = editing ? product.productId : null;
+  let productSaved = false;
+  let previewUrl = "";
+
+  imagePreview.addEventListener("error", () => {
+    imagePreview.hidden = true;
+    imagePlaceholder.hidden = false;
+  });
+  imageInput.addEventListener("change", () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    const file = imageInput.files?.[0];
+    if (!file) return;
+    previewUrl = URL.createObjectURL(file);
+    imagePreview.src = previewUrl;
+    imagePreview.hidden = false;
+    imagePlaceholder.hidden = true;
+  });
 
   function updateWholeLechonFields() {
     const selectedCategory = categories.find(
@@ -287,49 +331,68 @@ function renderProductModal(table, categories, product = null) {
     const formData = new FormData(form);
 
     try {
-      if (editing) {
-        await api.updateProduct(product.sku, {
-          price: formData.get("price"),
-          reorderLevel: formData.get("reorderLevel"),
-          status: formData.get("status"),
-          isAddon: formData.has("isAddon"),
-        });
-      } else {
-        const categoryId = Number(formData.get("categoryId"));
-        const category = categories.find((item) => item.id === categoryId);
-        const productData = {
-          sku: formData.get("sku"),
-          name: formData.get("name"),
-          categoryId,
-          category: category?.name,
-          productType: formData.get("productType"),
-          price: formData.get("price"),
-          stock: formData.get("stock"),
-          unit: formData.get("unit"),
-          reorderLevel: formData.get("reorderLevel"),
-          status: formData.get("status"),
-          expiryDate: formData.get("expiryDate"),
-          isAddon: formData.has("isAddon"),
-        };
+      if (!productSaved) {
+        if (editing) {
+          await api.updateProduct(product.sku, {
+            price: formData.get("price"),
+            reorderLevel: formData.get("reorderLevel"),
+            status: formData.get("status"),
+            isAddon: formData.has("isAddon"),
+          });
+        } else {
+          const categoryId = Number(formData.get("categoryId"));
+          const category = categories.find((item) => item.id === categoryId);
+          const productData = {
+            sku: formData.get("sku"),
+            name: formData.get("name"),
+            categoryId,
+            category: category?.name,
+            productType: formData.get("productType"),
+            price: formData.get("price"),
+            stock: formData.get("stock"),
+            unit: formData.get("unit"),
+            reorderLevel: formData.get("reorderLevel"),
+            status: formData.get("status"),
+            expiryDate: formData.get("expiryDate"),
+            isAddon: formData.has("isAddon"),
+          };
 
-        if (category?.name === "Whole Lechon") {
-          productData.size = formData.get("size");
-          productData.kilos = formData.get("kilos");
-          productData.servingPax = formData.get("servingPax");
+          if (category?.name === "Whole Lechon") {
+            productData.size = formData.get("size");
+            productData.kilos = formData.get("kilos");
+            productData.servingPax = formData.get("servingPax");
+          }
+
+          const savedProduct = await api.createProduct(productData);
+          savedProductId = savedProduct.id;
         }
+        productSaved = true;
+      }
 
-        await api.createProduct(productData);
+      const imageFile = formData.get("image");
+      if (imageFile instanceof File && imageFile.size > 0) {
+        if (!savedProductId) {
+          throw new Error("Product saved, but its ID was not returned.");
+        }
+        saveButton.textContent = "Uploading Image...";
+        await api.uploadProductImage(savedProductId, imageFile);
       }
     } catch (error) {
-      errorMessage.textContent =
-        error.message || "Unable to save product. Please try again.";
+      errorMessage.textContent = productSaved
+        ? `Product saved, but image upload failed: ${error.message || "Unable to upload image."}`
+        : error.message || "Unable to save product. Please try again.";
 
       errorMessage.style.display = "block";
       saveButton.disabled = false;
-      saveButton.textContent = editing ? "Save Changes" : "Save Product";
+      saveButton.textContent = productSaved
+        ? "Retry Image Upload"
+        : editing
+          ? "Save Changes"
+          : "Save Product";
       return;
     }
 
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
     modal.close();
 
     try {
@@ -578,10 +641,12 @@ export async function renderInventory(container, user) {
   }
 
   try {
-    const [products, categories] = await Promise.all([
+    const [products, categories, configuredCloudName] = await Promise.all([
       loadProducts(),
       user?.role === "Admin" ? api.getCategories() : Promise.resolve([]),
+      api.getCloudinaryConfig(),
     ]);
+    cloudinaryCloudName = configuredCloudName;
 
     container.innerHTML = `
       <div class="page-header"
@@ -606,8 +671,43 @@ export async function renderInventory(container, user) {
     `;
 
     const tableContainer = container.querySelector("#inventory-table");
+    tableContainer.addEventListener(
+      "error",
+      (event) => {
+        const image = event.target;
+        if (
+          !(image instanceof HTMLImageElement) ||
+          !image.classList.contains("inventory-product-image-photo")
+        ) {
+          return;
+        }
+        image.hidden = true;
+        const placeholder = image.nextElementSibling;
+        if (placeholder) placeholder.hidden = false;
+      },
+      true,
+    );
 
     const columns = [
+      {
+        key: "image",
+        label: "Image",
+        render: (product) => {
+          const imageUrl = productImageUrl(product.sku);
+          return `
+            <span class="inventory-product-image">
+              <img class="inventory-product-image-photo"
+                ${imageUrl ? `src="${escapeHTML(imageUrl)}"` : ""}
+                alt="${escapeHTML(product.name)}"
+                ${imageUrl ? "" : "hidden"} />
+              <span class="inventory-product-image-placeholder"
+                ${imageUrl ? "hidden" : ""}>
+                <i class="bi bi-image" aria-hidden="true"></i>
+              </span>
+            </span>
+          `;
+        },
+      },
       { key: "sku", label: "SKU" },
 
       {
