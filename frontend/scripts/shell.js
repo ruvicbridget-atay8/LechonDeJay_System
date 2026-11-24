@@ -56,12 +56,9 @@ export function renderShell(user, pages, onLogout) {
             <i class="bi bi-list"></i>
           </button>
           <div class="topbar-right">
-            <span class="topbar-date"><i class="bi bi-calendar3"></i> ${today}</span>
-            <span class="avatar">${esc(initials(user.name))}</span>
-            <div class="topbar-user">
-              <strong>${esc(user.name)}</strong>
-              <small>${esc(user.role)}</small>
-            </div>
+            <span class="topbar-date">
+              <i class="bi bi-calendar3"></i> ${today}
+            </span>
           </div>
         </header>
         <div class="alert" id="shell-error" role="alert" hidden></div>
