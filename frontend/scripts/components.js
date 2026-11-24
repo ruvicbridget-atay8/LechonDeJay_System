@@ -181,6 +181,48 @@ export function openModal({
   };
 }
 
+export function showAlertPopup(message, title = "Notice") {
+  document.querySelector(".alert-popup-overlay")?.remove();
+
+  const previouslyFocusedElement = document.activeElement;
+  const overlay = document.createElement("div");
+  overlay.className = "popup-overlay alert-popup-overlay";
+  overlay.innerHTML = `
+    <div class="popup"
+         role="alertdialog"
+         aria-modal="true"
+         aria-labelledby="alert-popup-title"
+         aria-describedby="alert-popup-message">
+      <i class="bi bi-exclamation-circle-fill popup-icon" aria-hidden="true"></i>
+      <h2 id="alert-popup-title">${escapeHTML(title)}</h2>
+      <p id="alert-popup-message">${escapeHTML(message)}</p>
+      <button class="btn btn--primary btn--block" type="button">OK</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const okButton = overlay.querySelector("button");
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener("keydown", handleKeydown);
+    if (previouslyFocusedElement?.isConnected) {
+      previouslyFocusedElement.focus();
+    }
+  };
+  const handleKeydown = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+    }
+  };
+
+  okButton.addEventListener("click", close);
+  document.addEventListener("keydown", handleKeydown);
+  okButton.focus();
+
+  return { close, element: overlay };
+}
+
 // ---------- REUSABLE TABLE ----------
 export function renderTable(container, {
   columns = [],

@@ -7,6 +7,7 @@ import {
   statusChip,
   openModal,
   escapeHTML,
+  showAlertPopup,
 } from "./components.js";
 
 const formatCurrency = (amount) =>
@@ -344,29 +345,17 @@ function showTransactionDetails(transaction, user, container) {
           <h3>Void / Refund</h3>
 
           <div class="form-group">
-            <label>Type *</label>
+            <label for="admin-void-type">Request Type *</label>
 
-            <div>
-              <label>
-                <input
-                  type="radio"
-                  name="requestType"
-                  value="Void"
-                  required
-                >
-                Void
-              </label>
-
-              <label>
-                <input
-                  type="radio"
-                  name="requestType"
-                  value="Refund"
-                  required
-                >
-                Refund
-              </label>
-            </div>
+            <select
+              id="admin-void-type"
+              name="requestType"
+              required
+            >
+              <option value="">Select request type</option>
+              <option value="Void">Void</option>
+              <option value="Refund">Refund</option>
+            </select>
           </div>
 
           <div class="form-group">
@@ -376,7 +365,7 @@ function showTransactionDetails(transaction, user, container) {
               id="admin-void-reason"
               name="reason"
               rows="3"
-              maxlength="500"
+              maxlength="255"
               placeholder="Explain the reason..."
               required
             ></textarea>
@@ -552,7 +541,7 @@ function showTransactionDetails(transaction, user, container) {
         <table class="items">${items}</table>
       `);
     } catch (error) {
-      window.alert(error.message || "Could not print the kitchen ticket.");
+      showAlertPopup(error.message || "Could not print the kitchen ticket.");
     } finally {
       kitchenButton.disabled = false;
     }
@@ -583,7 +572,7 @@ function showTransactionDetails(transaction, user, container) {
         <p class="line">Change <strong>${formatCurrency(Number(receipt.amount || 0) - Number(receipt.total_due || 0))}</strong></p>
       `);
     } catch (error) {
-      window.alert(error.message || "Could not print the receipt.");
+      showAlertPopup(error.message || "Could not print the receipt.");
     } finally {
       receiptButton.disabled = false;
     }
@@ -627,9 +616,7 @@ if (user.role === "Admin") {
   voidForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    const type = voidForm.querySelector(
-      'input[name="requestType"]:checked'
-    )?.value;
+    const type = voidForm.elements.requestType.value;
 
     const reasonText = voidForm.elements.reason.value.trim();
 
@@ -647,11 +634,10 @@ if (user.role === "Admin") {
     submitBtn.textContent = "Applying...";
 
     try {
-      await api.voidRefundTransaction(
+      await api.directVoidRefund(
         transaction.transactionId,
         type,
-        reasonText,
-        user.name
+        reasonText
       );
 
       modal?.close?.();

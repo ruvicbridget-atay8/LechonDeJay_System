@@ -820,6 +820,39 @@ export async function requestTransactionAction({
   return { success: true };
 }
 
+export async function directVoidRefund(transactionId, type, reason) {
+  const id = Number(transactionId);
+  const cleanReason = String(reason || "").trim();
+
+  if (!Number.isInteger(id) || id < 1) {
+    throw new Error("A valid transaction ID is required.");
+  }
+  if (!["Void", "Refund"].includes(type)) {
+    throw new Error("Please select Void or Refund.");
+  }
+  if (!cleanReason) {
+    throw new Error("Please provide a reason.");
+  }
+
+  const response = await inventoryRequest("/approvals/direct", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      transaction_id: id,
+      request_type: type,
+      reason: cleanReason,
+    }),
+  });
+  if (
+    response.success !== true ||
+    !response.request ||
+    !response.transaction
+  ) {
+    throw new Error(response.message || "Unable to apply the change.");
+  }
+  return response;
+}
+
 // ---------- Approval Requests (Admin) ----------
 // Pending void and refund requests, oldest first.
 export async function getPendingRequests() {

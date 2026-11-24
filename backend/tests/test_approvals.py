@@ -13,6 +13,19 @@ from app.routes.approvals import approvals_bp
 from app.services.approval_service import ApprovalError
 
 
+class FakeCursor:
+    def __init__(self, rows=(), lastrowid=52):
+        self.rows = iter(rows)
+        self.lastrowid = lastrowid
+        self.executed = []
+
+    def execute(self, query, params=None):
+        self.executed.append((query, params))
+
+    def fetchone(self):
+        return next(self.rows, None)
+
+
 @pytest.fixture
 def client():
     app = Flask(__name__)
@@ -67,6 +80,166 @@ def test_admin_lists_pending_requests(client):
     service.assert_called_once_with(1, "Pending")
 
 
+@pytest.mark.parametrize(
+    ("request_type", "expected_status"),
+    [("Void", "Voided"), ("Refund", "Refunded")],
+)
+def test_admin_direct_void_refund(client, request_type, expected_status):
+    admin = {"role": "Admin", "account_status": "Active"}
+    pending_request = {
+        "request_id": 52,
+        "transaction_id": 11,
+        "requested_by_user_id": 1,
+        "request_type": request_type,
+        "reason": "Test direct reversal",
+        "status": "Pending",
+    }
+    cursor = FakeCursor(
+        [
+            admin,
+            {"status": "Completed"},
+            None,
+            admin,
+            pending_request,
+            {"status": "Completed"},
+        ]
+    )
+    connection_calls = []
+
+    def run_in_one_transaction(callback):
+        connection_calls.append(cursor)
+        return callback(cursor)
+
+    payload = {
+        "transaction_id": 11,
+        "request_type": request_type,
+        "reason": "Test direct reversal",
+    }
+    with logged_in(client, "Admin", 1), patch(
+        "app.services.approval_service._connection_call",
+        side_effect=run_in_one_transaction,
+    ):
+        response = client.post("/approvals/direct", json=payload)
+
+    assert response.status_code == 200
+    assert response.json == {
+        "success": True,
+        "message": f"Transaction {expected_status.lower()} successfully.",
+        "request": {
+            "request_id": 52,
+            "transaction_id": 11,
+            "requested_by_user_id": 1,
+            "request_type": request_type,
+            "reason": "Test direct reversal",
+            "status": "Approved",
+            "reviewed_by_user_id": 1,
+        },
+        "transaction": {
+            "transaction_id": 11,
+            "status": expected_status,
+        },
+    }
+    assert len(connection_calls) == 1
+    assert any(
+        query.startswith("INSERT INTO approval_requests")
+        for query, _ in cursor.executed
+    )
+    assert (
+        "UPDATE transactions SET status=%s, void_refund_reason=%s, "
+        "approved_by_user_id=%s WHERE transaction_id=%s",
+        (expected_status, "Test direct reversal", 1, 11),
+    ) in cursor.executed
+    assert any(
+        query.startswith("UPDATE approval_requests SET status=%s")
+        and params == ("Approved", 1, 52)
+        for query, params in cursor.executed
+    )
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (
+            {"transaction_id": 11, "request_type": "Exchange", "reason": "Test"},
+            "request_type must be Void or Refund.",
+        ),
+        (
+            {"transaction_id": 11, "request_type": "Void"},
+            "A reason of 1-255 characters is required.",
+        ),
+        (
+            {"transaction_id": 11, "request_type": "Void", "reason": "  "},
+            "A reason of 1-255 characters is required.",
+        ),
+        (
+            {"transaction_id": "11", "request_type": "Void", "reason": "Test"},
+            "transaction_id must be a positive integer.",
+        ),
+    ],
+)
+def test_admin_direct_void_refund_validates_payload(client, payload, message):
+    with logged_in(client, "Admin", 1), patch(
+        "app.services.approval_service._connection_call",
+        side_effect=AssertionError("Invalid input must not start a transaction."),
+    ):
+        response = client.post("/approvals/direct", json=payload)
+
+    assert response.status_code == 400
+    assert response.json == {"success": False, "message": message}
+
+
+@pytest.mark.parametrize(
+    ("rows", "status", "message"),
+    [
+        (
+            [{"role": "Admin", "account_status": "Active"}, None],
+            404,
+            "Transaction not found.",
+        ),
+        (
+            [
+                {"role": "Admin", "account_status": "Active"},
+                {"status": "Voided"},
+            ],
+            409,
+            "Only Completed transactions can be voided or refunded.",
+        ),
+        (
+            [
+                {"role": "Admin", "account_status": "Active"},
+                {"status": "Completed"},
+                {"request_id": 9},
+            ],
+            409,
+            "A request is already pending for this transaction.",
+        ),
+    ],
+)
+def test_admin_direct_void_refund_transaction_errors(
+    client, rows, status, message
+):
+    cursor = FakeCursor(rows)
+
+    def run_in_one_transaction(callback):
+        return callback(cursor)
+
+    with logged_in(client, "Admin", 1), patch(
+        "app.services.approval_service._connection_call",
+        side_effect=run_in_one_transaction,
+    ):
+        response = client.post(
+            "/approvals/direct",
+            json={
+                "transaction_id": 11,
+                "request_type": "Void",
+                "reason": "Test direct reversal",
+            },
+        )
+
+    assert response.status_code == status
+    assert response.json == {"success": False, "message": message}
+
+
 @pytest.mark.parametrize("decision,endpoint,expected_status", [
     ("Approve", "approve", "Approved"),
     ("Cancel", "cancel", "Cancelled"),
@@ -108,6 +281,7 @@ def test_cashier_cannot_use_admin_endpoints(client):
     with logged_in(client, "Cashier", 2):
         for method, url in (
             ("get", "/approvals/requests"),
+            ("post", "/approvals/direct"),
             ("post", "/approvals/requests/6/approve"),
             ("post", "/approvals/requests/6/cancel"),
         ):
@@ -128,6 +302,7 @@ def test_admin_cannot_submit_cashier_request(client):
 def test_unauthenticated_users_rejected(client):
     for method, url in (
         ("post", "/approvals/requests"),
+        ("post", "/approvals/direct"),
         ("get", "/approvals/requests"),
         ("post", "/approvals/requests/6/approve"),
         ("post", "/approvals/requests/6/cancel"),

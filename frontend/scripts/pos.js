@@ -1,5 +1,6 @@
 // pos.js: POS screen.
 import * as api from "./api.js";
+import { showAlertPopup } from "./components.js";
 
 const CATEGORIES = [
   "All",
@@ -256,7 +257,7 @@ function showOrderPlaced(
       try {
         await printTransaction(transactionId, "kitchen");
       } catch (error) {
-        window.alert(error.message || "Could not print the kitchen ticket.");
+        showAlertPopup(error.message || "Could not print the kitchen ticket.");
       } finally {
         event.currentTarget.disabled = false;
       }
@@ -268,7 +269,7 @@ function showOrderPlaced(
       try {
         await printTransaction(transactionId, "receipt");
       } catch (error) {
-        window.alert(error.message || "Could not print the receipt.");
+        showAlertPopup(error.message || "Could not print the receipt.");
       } finally {
         event.currentTarget.disabled = false;
       }

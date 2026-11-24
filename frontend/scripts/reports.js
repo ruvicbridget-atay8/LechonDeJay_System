@@ -2,7 +2,7 @@
  // reports.js: Lechon De Jay Admin Reports
 
 import * as api from "./api.js";
-import { escapeHTML } from "./components.js";
+import { escapeHTML, showAlertPopup } from "./components.js";
 
 const peso = (amount) =>
   "₱ " + Number(amount || 0).toLocaleString("en-PH", {
@@ -157,7 +157,7 @@ const csvCell = (value) =>
 
 const downloadCSV = (filename, rows) => {
   if (!rows.length) {
-    alert("There is no report data to export.");
+    showAlertPopup("There is no report data to export.");
     return;
   }
 
@@ -1228,12 +1228,12 @@ export async function renderReports(container, user) {
           const end = container.querySelector("#reports-end-date").value;
 
           if (!start || !end) {
-            alert("Please select both a start date and an end date.");
+            showAlertPopup("Please select both a start date and an end date.");
             return;
           }
 
           if (start > end) {
-            alert("Start Date cannot be later than End Date.");
+            showAlertPopup("Start Date cannot be later than End Date.");
             return;
           }
 

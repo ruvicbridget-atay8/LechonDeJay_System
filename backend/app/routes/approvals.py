@@ -3,6 +3,7 @@ from app.services import role_required
 from app.services.approval_service import (
     ApprovalError,
     create_request,
+    direct_void_refund,
     list_requests,
     decide_request,
 )
@@ -33,6 +34,19 @@ def request_approval():
         data.get("reason"),
     )
     return jsonify({"success": True, "data": result}), 201
+
+
+@approvals_bp.post("/approvals/direct")
+@role_required("Admin")
+def direct_approval():
+    data = _body()
+    result = direct_void_refund(
+        data.get("transaction_id"),
+        session["user_id"],
+        data.get("request_type"),
+        data.get("reason"),
+    )
+    return jsonify({"success": True, **result})
 
 
 @approvals_bp.get("/approvals/requests")

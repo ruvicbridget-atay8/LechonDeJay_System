@@ -89,6 +89,10 @@
   animation: modalFadeIn 0.2s ease;
 }
 
+.popup-overlay.alert-popup-overlay {
+  z-index: 10000;
+}
+
 .shared-modal {
   width: 100%;
   max-height: 90vh;
