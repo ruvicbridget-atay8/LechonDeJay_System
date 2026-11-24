@@ -1216,6 +1216,65 @@ export async function getShifts(_user, filters = {}) {
   return response.data.map(mapShift).filter(Boolean);
 }
 
+async function getReportData(endpoint, startDate, endDate) {
+  const params = new URLSearchParams({
+    start_date: startDate,
+    end_date: endDate,
+  });
+  const response = await inventoryRequest(
+    `/reports/${endpoint}?${params.toString()}`,
+  );
+  if (response.success !== true || response.data == null) {
+    throw new Error(response.message || "The server returned an invalid report.");
+  }
+  return response.data;
+}
+
+export async function getSalesReport(startDate, endDate) {
+  const data = await getReportData("sales", startDate, endDate);
+  if (
+    !data.summary ||
+    !Array.isArray(data.daily_sales) ||
+    !Array.isArray(data.payment_methods)
+  ) {
+    throw new Error("The server returned an invalid sales report.");
+  }
+  return data;
+}
+
+export async function getProductPerformanceReport(startDate, endDate) {
+  const data = await getReportData(
+    "product-performance",
+    startDate,
+    endDate,
+  );
+  if (!Array.isArray(data)) {
+    throw new Error("The server returned an invalid product performance report.");
+  }
+  return data;
+}
+
+export async function getInventoryReport(startDate, endDate) {
+  const data = await getReportData("inventory", startDate, endDate);
+  if (!Array.isArray(data)) {
+    throw new Error("The server returned an invalid inventory report.");
+  }
+  return data;
+}
+
+export async function getExceptionsReport(startDate, endDate) {
+  const data = await getReportData("exceptions", startDate, endDate);
+  if (
+    !Array.isArray(data.voids_refunds) ||
+    !Array.isArray(data.stock_movements) ||
+    !Array.isArray(data.discount_exceptions) ||
+    !Array.isArray(data.pending_requests)
+  ) {
+    throw new Error("The server returned an invalid exceptions report.");
+  }
+  return data;
+}
+
 export async function getStaffCashReport(startDate, endDate) {
   const params = new URLSearchParams({
     start_date: startDate,

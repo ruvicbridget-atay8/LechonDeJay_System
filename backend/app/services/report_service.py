@@ -140,6 +140,8 @@ def get_product_sales_report(
             ON t.transaction_id = ti.transaction_id
         JOIN products p
             ON p.product_id = ti.product_id
+        JOIN categories c
+            ON c.category_id = p.category_id
         WHERE t.status = 'Completed'
           AND t.date_time >= %s
           AND t.date_time < %s
@@ -147,7 +149,8 @@ def get_product_sales_report(
             p.product_id,
             p.sku,
             p.name,
-            p.unit
+            p.unit,
+            c.category_name
         ORDER BY gross_revenue DESC, p.name ASC
         """,
         (start, end),
@@ -366,4 +369,73 @@ def get_void_refund_report(
         ORDER BY t.date_time DESC, t.transaction_id DESC
         """,
         (start, end),
+    )
+
+
+def get_discount_exception_report(
+    admin_user_id,
+    start_date,
+    end_date,
+):
+    """List completed transactions with discounts for the date range."""
+    _require_admin(admin_user_id)
+    start, end = _validate_date_range(start_date, end_date)
+
+    return fetch_all(
+        """
+        SELECT
+            t.transaction_id,
+            t.order_number,
+            t.date_time,
+            dt.discount_name AS discount_type,
+            t.discount_amount,
+            t.total_due,
+            staff.full_name AS processed_by
+        FROM transactions t
+        JOIN discount_types dt
+            ON dt.discount_type_id = t.discount_type_id
+        JOIN users staff
+            ON staff.user_id = t.processed_by_user_id
+        WHERE t.status = 'Completed'
+          AND t.discount_amount > 0
+          AND t.date_time >= %s
+          AND t.date_time < %s
+        ORDER BY t.date_time DESC, t.transaction_id DESC
+        """,
+        (start, end),
+    )
+
+
+def get_pending_request_report(
+    admin_user_id,
+    start_date,
+    end_date,
+):
+    """List pending approval requests by transaction or request date."""
+    _require_admin(admin_user_id)
+    start, end = _validate_date_range(start_date, end_date)
+
+    return fetch_all(
+        """
+        SELECT
+            ar.request_id,
+            t.transaction_id,
+            t.order_number,
+            ar.request_type,
+            ar.reason,
+            requester.full_name AS requested_by,
+            ar.requested_at
+        FROM approval_requests ar
+        JOIN transactions t
+            ON t.transaction_id = ar.transaction_id
+        JOIN users requester
+            ON requester.user_id = ar.requested_by_user_id
+        WHERE ar.status = 'Pending'
+          AND (
+                (t.date_time >= %s AND t.date_time < %s)
+                OR (ar.requested_at >= %s AND ar.requested_at < %s)
+          )
+        ORDER BY ar.requested_at DESC, ar.request_id DESC
+        """,
+        (start, end, start, end),
     )

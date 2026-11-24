@@ -5,13 +5,30 @@ import * as api from "./api.js";
 import { escapeHTML, showAlertPopup } from "./components.js";
 
 const peso = (amount) =>
-  "₱ " + Number(amount || 0).toLocaleString("en-PH", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  amount == null || amount === ""
+    ? "—"
+    : "₱ " + Number(amount).toLocaleString("en-PH", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
 
 const number = (value) =>
-  Number(value || 0).toLocaleString("en-PH");
+  value == null || value === ""
+    ? "—"
+    : Number(value).toLocaleString("en-PH");
+
+const numericValue = (value) => {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const percentage = (value, total) => {
+  const amount = numericValue(value);
+  const totalAmount = numericValue(total);
+  if (amount == null || totalAmount == null) return "—";
+  return `${totalAmount ? (amount / totalAmount * 100).toFixed(1) : "0.0"}%`;
+};
 
 const safeDate = (value) => {
   if (!value) return null;
@@ -48,76 +65,6 @@ const formatDateTime = (date) =>
       })
     : "—";
 
-const transactionDate = (transaction) =>
-  safeDate(
-    transaction.dateTime ||
-    transaction.createdAt ||
-    transaction.timestamp ||
-    transaction.date
-  );
-
-const transactionTotal = (transaction) =>
-  Number(
-    transaction.total ??
-    transaction.totalDue ??
-    transaction.grandTotal ??
-    0
-  );
-
-const transactionItems = (transaction) =>
-  Array.isArray(transaction.items) ? transaction.items : [];
-
-const itemQuantity = (item) =>
-  Number(item.qty ?? item.quantity ?? 0);
-
-const itemName = (item) =>
-  item.name || item.productName || item.itemName || "Unnamed Product";
-
-const itemRevenue = (item) => {
-  if (item.lineTotal != null) return Number(item.lineTotal);
-  return Number(item.price || 0) * itemQuantity(item);
-};
-
-const transactionGross = (transaction) => {
-  const subtotal = Number(transaction.subtotal);
-  if (Number.isFinite(subtotal) && transaction.subtotal != null) {
-    return subtotal;
-  }
-
-  return transactionItems(transaction).reduce(
-    (sum, item) => sum + itemRevenue(item),
-    0
-  );
-};
-
-const transactionDiscount = (transaction) => {
-  const candidates = [
-    transaction.discountAmount,
-    transaction.discountTotal,
-    transaction.discountValue,
-    transaction.discountApplied,
-  ];
-
-  for (const value of candidates) {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return Math.max(0, value);
-    }
-
-    if (typeof value === "string" && value.trim() !== "") {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return Math.max(0, parsed);
-    }
-  }
-
-  return Math.max(0, transactionGross(transaction) - transactionTotal(transaction));
-};
-
-const isCompleted = (transaction) =>
-  String(transaction.status || "Completed").toLowerCase() === "completed";
-
-const isCash = (method) =>
-  String(method || "").toLowerCase().includes("cash");
-
 const getRange = (mode, customStart, customEnd) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -143,13 +90,6 @@ const getRange = (mode, customStart, customEnd) => {
   end.setHours(23, 59, 59, 999);
 
   return { start, end };
-};
-
-const inRange = (date, range) => {
-  if (!date) return false;
-  if (range.start && date < range.start) return false;
-  if (range.end && date > range.end) return false;
-  return true;
 };
 
 const csvCell = (value) =>
@@ -189,218 +129,119 @@ export async function renderReports(container, user) {
     return;
   }
 
-  container.innerHTML = `
-    <div class="reports-page">
-      <h1 class="page-title">Reports</h1>
-      <p class="muted">Loading report data...</p>
-    </div>
-  `;
+  let currentPage = "hub";
+  let rangeMode = "month";
+  let customStart = "";
+  let customEnd = "";
+  let reportData = null;
+  let loading = true;
+  let reportError = "";
+  let requestVersion = 0;
 
-  try {
-    const [transactions, products, movements, shifts] = await Promise.all([
-      api.getTransactions(user),
-      api.getProducts(),
-      api.getStockMovements(),
-      api.getShifts(user),
-    ]);
+  const getCurrentRange = () =>
+    getRange(rangeMode, customStart, customEnd);
 
-    const allTransactions = Array.isArray(transactions) ? transactions : [];
-    const allProducts = Array.isArray(products) ? products : [];
-    const allMovements = Array.isArray(movements) ? movements : [];
-    const allShifts = Array.isArray(shifts) ? shifts : [];
-
-    let currentPage = "hub";
-    let rangeMode = "month";
-    let customStart = "";
-    let customEnd = "";
-    let categoryFilter = "All";
-    const staffCashReportCache = new Map();
-    const staffCashReportErrors = new Map();
-    const staffCashReportRequests = new Map();
-
-    const staffCashReportRangeKey = (range) =>
-      range.start && range.end
-        ? `${dateKey(range.start)}:${dateKey(range.end)}`
-        : null;
-
-    const getStaffCashReportForRange = (range) => {
-      const key = staffCashReportRangeKey(range);
-      if (!key) return null;
-      if (staffCashReportCache.has(key)) return staffCashReportCache.get(key);
-      if (staffCashReportErrors.has(key)) return null;
-
-      if (!staffCashReportRequests.has(key)) {
-        const startDate = dateKey(range.start);
-        const endDate = dateKey(range.end);
-        const request = api
-          .getStaffCashReport(startDate, endDate)
-          .then((staffCashReport) => {
-            staffCashReportCache.set(key, staffCashReport);
-            staffCashReportErrors.delete(key);
-          })
-          .catch((error) => {
-            staffCashReportErrors.set(
-              key,
-              error.message || "Unable to load cashier order counts.",
-            );
-          })
-          .finally(() => {
-            staffCashReportRequests.delete(key);
-            const activeRange = getRange(
-              rangeMode,
-              customStart,
-              customEnd,
-            );
-            if (
-              currentPage === "staff" &&
-              staffCashReportRangeKey(activeRange) === key
-            ) {
-              render();
-            }
-          });
-        staffCashReportRequests.set(key, request);
-      }
-
-      return null;
+  const getPreviousRange = (range) => {
+    if (!range.start || !range.end) return null;
+    const duration = range.end.getTime() - range.start.getTime() + 1;
+    return {
+      start: new Date(range.start.getTime() - duration),
+      end: new Date(range.start.getTime() - 1),
     };
+  };
 
-    const activeProducts = allProducts.filter(
+  const getInventoryItems = () => {
+    const products = reportData?.inventory || [];
+    const rawMaterials = products.filter(
       (product) =>
-        String(product.status || "").toLowerCase() !== "archived"
+        String(product.product_type || "").toLowerCase() === "raw material"
     );
+    return rawMaterials.length ? rawMaterials : products;
+  };
 
-    const getFilteredTransactions = (range) =>
-      allTransactions.filter((transaction) =>
-        inRange(transactionDate(transaction), range)
-      );
+  const isLowStock = (product) =>
+    Number(product.is_low_stock) === 1 &&
+    Number(product.current_stock) > 0;
 
-    const getSalesTransactions = (range) =>
-      getFilteredTransactions(range).filter(isCompleted);
+  const orderCountForShift = (shift) => {
+    const shiftCash = reportData?.staffCash?.shiftCash || [];
+    const cashierSales = reportData?.staffCash?.cashierSales || [];
+    const shiftRow = shiftCash.find(
+      (row) => Number(row.shift_id) === shift.shiftId
+    );
+    const cashierRow = cashierSales.find(
+      (row) => row.full_name === shift.staff
+    );
+    return (
+      shiftRow?.transaction_count ??
+      shift.salesCount ??
+      cashierRow?.transaction_count ??
+      null
+    );
+  };
 
-    const getSalesTotal = (items) =>
-      items.reduce((sum, item) => sum + transactionTotal(item), 0);
+  const loadReportData = async () => {
+    const range = getCurrentRange();
+    if (!range.start || !range.end) {
+      reportError = "Select a valid start and end date.";
+      loading = false;
+      render();
+      return;
+    }
 
-    const getProductSales = (items) => {
-      const sales = {};
+    const version = ++requestVersion;
+    const startDate = dateKey(range.start);
+    const endDate = dateKey(range.end);
+    const previousRange = getPreviousRange(range);
+    const previousStart = dateKey(previousRange.start);
+    const previousEnd = dateKey(previousRange.end);
 
-      items.forEach((transaction) => {
-        transactionItems(transaction).forEach((item) => {
-          const name = itemName(item);
-          const sku = item.sku || "";
-          const product = allProducts.find((p) => p.sku === sku);
+    loading = true;
+    reportError = "";
+    reportData = null;
+    render();
 
-          if (!sales[sku || name]) {
-            sales[sku || name] = {
-              name,
-              sku,
-              category: product?.category || "Uncategorized",
-              quantity: 0,
-              revenue: 0,
-            };
-          }
+    try {
+      const [
+        sales,
+        products,
+        inventory,
+        movements,
+        shifts,
+        staffCash,
+        exceptions,
+        previousSales,
+      ] = await Promise.all([
+        api.getSalesReport(startDate, endDate),
+        api.getProductPerformanceReport(startDate, endDate),
+        api.getInventoryReport(startDate, endDate),
+        api.getStockMovements({ startDate, endDate }),
+        api.getShifts(user, { startDate, endDate }),
+        api.getStaffCashReport(startDate, endDate),
+        api.getExceptionsReport(startDate, endDate),
+        api.getSalesReport(previousStart, previousEnd),
+      ]);
 
-          sales[sku || name].quantity += itemQuantity(item);
-          sales[sku || name].revenue += itemRevenue(item);
-        });
-      });
-
-      return Object.values(sales).sort(
-        (a, b) => b.revenue - a.revenue
-      );
-    };
-
-    const getDailySales = (items) => {
-      const days = {};
-
-      items.forEach((transaction) => {
-        const date = transactionDate(transaction);
-        if (!date) return;
-
-        const key = dateKey(date);
-
-        if (!days[key]) {
-          days[key] = { date: key, gross: 0, discount: 0, net: 0 };
-        }
-
-        days[key].gross += transactionGross(transaction);
-        days[key].discount += transactionDiscount(transaction);
-        days[key].net += transactionTotal(transaction);
-      });
-
-      return Object.values(days).sort((a, b) =>
-        a.date.localeCompare(b.date)
-      );
-    };
-
-    const getPaymentSummary = (items) => {
-      const summary = {};
-
-      items.forEach((transaction) => {
-        const method =
-          transaction.paymentMethod ||
-          transaction.payment ||
-          transaction.paymentType ||
-          "Unspecified";
-
-        summary[method] =
-          (summary[method] || 0) + transactionTotal(transaction);
-      });
-
-      return Object.entries(summary).sort((a, b) => b[1] - a[1]);
-    };
-
-    const getExceptions = (items) => {
-      const exceptions = [];
-
-      items.forEach((transaction) => {
-        const status = String(transaction.status || "Completed");
-        const requestStatus = String(transaction.requestStatus || "None");
-        const requestType = String(transaction.requestType || "");
-
-        if (status.toLowerCase() !== "completed") {
-          exceptions.push({
-            date: transactionDate(transaction),
-            order: transaction.transactionId || transaction.orderNumber || "—",
-            type: status,
-            staff: transaction.staff || "—",
-            reason:
-              transaction.voidRefundReason ||
-              transaction.requestReason ||
-              "No reason recorded",
-            amount: transactionTotal(transaction),
-            approval: requestStatus,
-          });
-        } else if (requestType) {
-          exceptions.push({
-            date: safeDate(transaction.requestedAt) || transactionDate(transaction),
-            order: transaction.transactionId || transaction.orderNumber || "—",
-            type: requestType,
-            staff: transaction.requestedBy || transaction.staff || "—",
-            reason: transaction.requestReason || "No reason recorded",
-            amount: transactionTotal(transaction),
-            approval: requestStatus,
-          });
-        }
-
-        const discount = transactionDiscount(transaction);
-
-        if (discount > 0 && isCompleted(transaction)) {
-          exceptions.push({
-            date: transactionDate(transaction),
-            order: transaction.transactionId || transaction.orderNumber || "—",
-            type: "Discount",
-            staff: transaction.staff || "—",
-            reason: transaction.discountReason || transaction.discountType || "Discount applied",
-            amount: discount,
-            approval: "Recorded",
-          });
-        }
-      });
-
-      return exceptions.sort(
-        (a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0)
-      );
-    };
+      if (version !== requestVersion) return;
+      reportData = {
+        sales,
+        products,
+        inventory,
+        movements,
+        shifts,
+        staffCash,
+        exceptions,
+        previousSales,
+      };
+      loading = false;
+      render();
+    } catch (error) {
+      if (version !== requestVersion) return;
+      reportError = error.message || "Unable to load reports.";
+      loading = false;
+      render();
+    }
+  };
 
     const renderFilterBar = () => `
       <section class="reports-filter-bar">
@@ -429,7 +270,7 @@ export async function renderReports(container, user) {
             : ""
         }
 
-        <button type="button" class="reports-export-btn" id="reports-export">
+        <button type="button" class="reports-export-btn" id="reports-export" ${loading || reportError ? "disabled" : ""}>
           Export CSV
         </button>
       </section>
@@ -451,53 +292,30 @@ export async function renderReports(container, user) {
       </tr>
     `;
 
-    const renderHub = (range) => {
-      const sales = getSalesTransactions(range);
-      const totalSales = getSalesTotal(sales);
-      const productsSold = getProductSales(sales).reduce(
-        (sum, product) => sum + product.quantity,
-        0
+    const renderHub = () => {
+      const summary = reportData.sales.summary;
+      const productsSold = reportData.products.reduce(
+        (sum, product) => sum + Number(product.quantity_sold || 0),
+        0,
       );
-
-      const lowStock = activeProducts.filter(
-        (product) =>
-          Number(product.stock || 0) > 0 &&
-          Number(product.stock || 0) <= Number(product.reorderLevel || 0)
+      const inventory = getInventoryItems();
+      const lowStockCount = inventory.filter(isLowStock).length;
+      const reconciledShifts = reportData.shifts.filter(
+        (shift) => shift.status === "Closed",
       );
-
-      const reviewCount = getExceptions(getFilteredTransactions(range))
-        .filter((exception) =>
-          ["pending", "review"].includes(
-            String(exception.approval).toLowerCase()
-          )
-        ).length;
-
-      const reconciledShifts = allShifts.filter(
-        (shift) => shift.status === "Closed" && inRange(
-          safeDate(shift.shiftDate),
-          range
-        )
+      const currentNet = numericValue(summary.net_sales);
+      const previousNet = numericValue(
+        reportData.previousSales.summary.net_sales,
       );
-
-      // Compare current selected period with the previous equal-length period.
       let comparison = "—";
-      let comparisonNote = "No previous period available";
+      let comparisonNote = "Previous-period sales unavailable";
 
-      if (range.start && range.end) {
-        const duration = range.end.getTime() - range.start.getTime() + 1;
-        const previousRange = {
-          start: new Date(range.start.getTime() - duration),
-          end: new Date(range.start.getTime() - 1),
-        };
-
-        const previousSales = getSalesTransactions(previousRange);
-        const previousTotal = getSalesTotal(previousSales);
-
-        if (previousTotal > 0) {
-          const change = ((totalSales - previousTotal) / previousTotal) * 100;
+      if (currentNet != null && previousNet != null) {
+        if (previousNet > 0) {
+          const change = ((currentNet - previousNet) / previousNet) * 100;
           comparison = `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
           comparisonNote = "Compared with previous period";
-        } else if (totalSales > 0) {
+        } else if (currentNet > 0) {
           comparison = "New";
           comparisonNote = "No previous-period sales";
         } else {
@@ -517,7 +335,7 @@ export async function renderReports(container, user) {
         <section class="reports-hero-card">
           <div>
             <span class="reports-eyebrow">TOTAL NET SALES</span>
-            <h2>${peso(totalSales)}</h2>
+            <h2>${peso(summary.net_sales)}</h2>
             <p>${escapeHTML(comparison)} ${escapeHTML(comparisonNote)}</p>
           </div>
           <div class="reports-hero-note">
@@ -531,7 +349,7 @@ export async function renderReports(container, user) {
             <span class="reports-card-kicker">01 · REVENUE</span>
             <strong>Sales</strong>
             <p>Revenue trends, discounts, and payment mix.</p>
-            <b>${peso(totalSales)}</b>
+            <b>${peso(summary.net_sales)}</b>
             <small>Net sales</small>
           </button>
 
@@ -547,7 +365,7 @@ export async function renderReports(container, user) {
             <span class="reports-card-kicker">03 · STOCK</span>
             <strong>Inventory</strong>
             <p>Monitor ingredient levels and stock movement.</p>
-            <b>${number(lowStock.length)}</b>
+            <b>${number(lowStockCount)}</b>
             <small>Items need restocking</small>
           </button>
 
@@ -562,9 +380,9 @@ export async function renderReports(container, user) {
           <button type="button" class="reports-hub-card" data-page="exceptions">
             <span class="reports-card-kicker">05 · AUDIT</span>
             <strong>Exceptions</strong>
-            <p>Review voids, refunds, and discounts.</p>
-            <b>${number(reviewCount)}</b>
-            <small>Requests needing review</small>
+            <p>Review recorded voids and refunds.</p>
+            <b>—</b>
+            <small>Review requests not included in this report</small>
           </button>
         </div>
 
@@ -574,14 +392,13 @@ export async function renderReports(container, user) {
       `;
     };
 
-    const renderSales = (range) => {
-      const sales = getSalesTransactions(range);
-      const totalGross = sales.reduce((sum, t) => sum + transactionGross(t), 0);
-      const totalDiscount = sales.reduce((sum, t) => sum + transactionDiscount(t), 0);
-      const totalNet = getSalesTotal(sales);
-      const daily = getDailySales(sales);
-      const payments = getPaymentSummary(sales);
-      const maxDaily = Math.max(1, ...daily.map((day) => day.net));
+    const renderSales = () => {
+      const { summary, daily_sales: daily, payment_methods: payments } =
+        reportData.sales;
+      const maxDaily = Math.max(
+        1,
+        ...daily.map((day) => Number(day.net_sales || 0)),
+      );
 
       return `
         <div class="reports-page-heading">
@@ -593,10 +410,10 @@ export async function renderReports(container, user) {
         </div>
 
         <section class="reports-stat-grid">
-          ${renderStat("Gross Sales", peso(totalGross))}
-          ${renderStat("Discounts", peso(totalDiscount))}
-          ${renderStat("Net Sales", peso(totalNet))}
-          ${renderStat("Completed Orders", number(sales.length))}
+          ${renderStat("Gross Sales", peso(summary.gross_sales))}
+          ${renderStat("Discounts", peso(summary.total_discounts))}
+          ${renderStat("Net Sales", peso(summary.net_sales))}
+          ${renderStat("Completed Orders", number(summary.completed_transactions))}
         </section>
 
         <section class="reports-panel">
@@ -606,12 +423,12 @@ export async function renderReports(container, user) {
               ? `
                 <div class="reports-bar-chart">
                   ${daily.map((day) => `
-                    <div class="reports-bar-column" title="${escapeHTML(day.date)}: ${peso(day.net)}">
-                      <strong>${peso(day.net)}</strong>
+                    <div class="reports-bar-column" title="${escapeHTML(day.sale_date)}: ${peso(day.net_sales)}">
+                      <strong>${peso(day.net_sales)}</strong>
                       <div class="reports-bar-track">
-                        <div class="reports-bar-fill" style="height:${Math.max(3, day.net / maxDaily * 100)}%"></div>
+                        <div class="reports-bar-fill" style="height:${Math.max(3, Number(day.net_sales || 0) / maxDaily * 100)}%"></div>
                       </div>
-                      <small>${escapeHTML(day.date.slice(5))}</small>
+                      <small>${day.sale_date ? escapeHTML(String(day.sale_date).slice(5)) : "—"}</small>
                     </div>
                   `).join("")}
                 </div>
@@ -626,11 +443,11 @@ export async function renderReports(container, user) {
             payments.length
               ? `
                 <div class="reports-payment-list">
-                  ${payments.map(([method, amount]) => `
+                  ${payments.map((payment) => `
                     <div class="reports-payment-row">
-                      <span>${escapeHTML(method)}</span>
-                      <strong>${peso(amount)}</strong>
-                      <small>${totalNet ? (amount / totalNet * 100).toFixed(1) : "0.0"}%</small>
+                      <span>${escapeHTML(payment.method_name || "—")}</span>
+                      <strong>${peso(payment.total_sales)}</strong>
+                      <small>${percentage(payment.total_sales, summary.net_sales)}</small>
                     </div>
                   `).join("")}
                 </div>
@@ -656,10 +473,10 @@ export async function renderReports(container, user) {
                   daily.length
                     ? daily.map((day) => `
                       <tr>
-                        <td>${escapeHTML(day.date)}</td>
-                        <td>${peso(day.gross)}</td>
-                        <td>${peso(day.discount)}</td>
-                        <td><strong>${peso(day.net)}</strong></td>
+                        <td>${formatDate(safeDate(day.sale_date))}</td>
+                        <td>${peso(day.gross_sales)}</td>
+                        <td>${peso(day.discounts)}</td>
+                        <td><strong>${peso(day.net_sales)}</strong></td>
                       </tr>
                     `).join("")
                     : renderTableMessage("No sales records found.", 4)
@@ -671,21 +488,17 @@ export async function renderReports(container, user) {
       `;
     };
 
-    const renderProducts = (range) => {
-      const sales = getSalesTransactions(range);
-      const allProductSales = getProductSales(sales);
-      const categories = [
-        "All",
-        ...new Set(allProductSales.map((item) => item.category)),
-      ];
-
-      const filtered = categoryFilter === "All"
-        ? allProductSales
-        : allProductSales.filter((item) => item.category === categoryFilter);
-
-      const topTen = filtered.slice(0, 10);
-      const maxRevenue = Math.max(1, ...topTen.map((item) => item.revenue));
-      const totalRevenue = filtered.reduce((sum, item) => sum + item.revenue, 0);
+    const renderProducts = () => {
+      const products = reportData.products;
+      const topTen = products.slice(0, 10);
+      const maxRevenue = Math.max(
+        1,
+        ...topTen.map((item) => Number(item.gross_revenue || 0)),
+      );
+      const totalRevenue = products.reduce(
+        (sum, item) => sum + Number(item.gross_revenue || 0),
+        0,
+      );
 
       return `
         <div class="reports-page-heading">
@@ -695,17 +508,6 @@ export async function renderReports(container, user) {
             <p class="muted">Rank products by revenue and units sold.</p>
           </div>
         </div>
-
-        <section class="reports-filter-inline">
-          <label for="reports-category-filter">Category</label>
-          <select id="reports-category-filter">
-            ${categories.map((category) => `
-              <option value="${escapeHTML(category)}" ${categoryFilter === category ? "selected" : ""}>
-                ${escapeHTML(category)}
-              </option>
-            `).join("")}
-          </select>
-        </section>
 
         <section class="reports-panel">
           <h2>Top 10 Products by Revenue</h2>
@@ -718,11 +520,11 @@ export async function renderReports(container, user) {
                       <span class="reports-rank">${index + 1}</span>
                       <div class="reports-ranked-content">
                         <div class="reports-ranked-label">
-                          <strong>${escapeHTML(item.name)}</strong>
-                          <span>${peso(item.revenue)}</span>
+                          <strong>${escapeHTML(item.name || "—")}</strong>
+                          <span>${peso(item.gross_revenue)}</span>
                         </div>
                         <div class="reports-horizontal-track">
-                          <div class="reports-horizontal-fill" style="width:${item.revenue / maxRevenue * 100}%"></div>
+                          <div class="reports-horizontal-fill" style="width:${Number(item.gross_revenue || 0) / maxRevenue * 100}%"></div>
                         </div>
                       </div>
                     </div>
@@ -748,14 +550,14 @@ export async function renderReports(container, user) {
               </thead>
               <tbody>
                 ${
-                  filtered.length
-                    ? filtered.map((item) => `
+                  products.length
+                    ? products.map((item) => `
                       <tr>
-                        <td><strong>${escapeHTML(item.name)}</strong></td>
-                        <td>${escapeHTML(item.category)}</td>
-                        <td>${number(item.quantity)}</td>
-                        <td>${peso(item.revenue)}</td>
-                        <td>${totalRevenue ? (item.revenue / totalRevenue * 100).toFixed(1) : "0.0"}%</td>
+                        <td><strong>${escapeHTML(item.name || "—")}</strong></td>
+                        <td>${escapeHTML(item.category_name || "—")}</td>
+                        <td>${number(item.quantity_sold)}</td>
+                        <td>${peso(item.gross_revenue)}</td>
+                        <td>${percentage(item.gross_revenue, totalRevenue)}</td>
                       </tr>
                     `).join("")
                     : renderTableMessage("No product sales found.", 5)
@@ -767,39 +569,13 @@ export async function renderReports(container, user) {
       `;
     };
 
-    const renderInventory = (range) => {
-      const rawMaterials = activeProducts.filter(
-        (product) =>
-          String(product.productType || "").toLowerCase() === "raw material"
-      );
-
-      const inventoryItems = rawMaterials.length ? rawMaterials : activeProducts;
-
-      const lowStock = inventoryItems.filter(
-        (product) =>
-          Number(product.stock || 0) > 0 &&
-          Number(product.stock || 0) <= Number(product.reorderLevel || 0)
-      );
-
+    const renderInventory = () => {
+      const inventoryItems = getInventoryItems();
+      const lowStock = inventoryItems.filter(isLowStock);
       const outOfStock = inventoryItems.filter(
-        (product) => Number(product.stock || 0) <= 0
+        (product) => Number(product.current_stock) <= 0
       );
-
-      const valuedProducts = inventoryItems.filter(
-        (product) => Number.isFinite(Number(product.unitCost ?? product.costPrice))
-          && (product.unitCost != null || product.costPrice != null)
-      );
-
-      const stockValue = valuedProducts.reduce(
-        (sum, product) =>
-          sum + Number(product.stock || 0) *
-            Number(product.unitCost ?? product.costPrice ?? 0),
-        0
-      );
-
-      const rangeMovements = allMovements.filter((movement) =>
-        inRange(safeDate(movement.dateTime || movement.timestamp || movement.date), range)
-      );
+      const movements = reportData.movements;
 
       return `
         <div class="reports-page-heading">
@@ -816,8 +592,8 @@ export async function renderReports(container, user) {
           ${renderStat("Out of Stock", number(outOfStock.length))}
           ${renderStat(
             "Closing Stock Value",
-            valuedProducts.length ? peso(stockValue) : "Not available",
-            valuedProducts.length ? "Based on recorded unit costs" : "Product cost data is not configured"
+            "Not available",
+            "Unit cost is not returned by the inventory report",
           )}
         </section>
 
@@ -842,12 +618,12 @@ export async function renderReports(container, user) {
                     <tbody>
                       ${[...outOfStock, ...lowStock].map((product) => `
                         <tr>
-                          <td><strong>${escapeHTML(product.name)}</strong></td>
-                          <td>${number(product.stock)} ${escapeHTML(product.unit || "")}</td>
-                          <td>${number(product.reorderLevel)}</td>
+                          <td><strong>${escapeHTML(product.name || "—")}</strong></td>
+                          <td>${number(product.current_stock)} ${escapeHTML(product.unit || "")}</td>
+                          <td>${number(product.reorder_level)}</td>
                           <td>
-                            <span class="reports-status ${Number(product.stock) <= 0 ? "danger" : "warning"}">
-                              ${Number(product.stock) <= 0 ? "Out of stock" : "Low stock"}
+                            <span class="reports-status ${Number(product.current_stock) <= 0 ? "danger" : "warning"}">
+                              ${Number(product.current_stock) <= 0 ? "Out of stock" : "Low stock"}
                             </span>
                           </td>
                         </tr>
@@ -868,6 +644,7 @@ export async function renderReports(container, user) {
                 <tr>
                   <th>Date</th>
                   <th>Product</th>
+                  <th>SKU</th>
                   <th>Movement</th>
                   <th>Quantity</th>
                   <th>Reason</th>
@@ -876,18 +653,19 @@ export async function renderReports(container, user) {
               </thead>
               <tbody>
                 ${
-                  rangeMovements.length
-                    ? rangeMovements.map((movement) => `
+                  movements.length
+                    ? movements.map((movement) => `
                       <tr>
-                        <td>${formatDateTime(safeDate(movement.dateTime || movement.timestamp || movement.date))}</td>
-                        <td>${escapeHTML(movement.productName || movement.sku || "—")}</td>
+                        <td>${formatDateTime(safeDate(movement.dateTime))}</td>
+                        <td>${escapeHTML(movement.productName || "—")}</td>
+                        <td>${escapeHTML(movement.sku || "—")}</td>
                         <td>${escapeHTML(movement.movementType || "—")}</td>
                         <td>${number(movement.quantity)}</td>
                         <td>${escapeHTML(movement.reason || "—")}</td>
-                        <td>${escapeHTML(movement.staff || "—")}</td>
+                        <td>${escapeHTML(movement.staff_name || "—")}</td>
                       </tr>
                     `).join("")
-                    : renderTableMessage("No stock movements in this date range.", 6)
+                    : renderTableMessage("No stock movements in this date range.", 7)
                 }
               </tbody>
             </table>
@@ -895,20 +673,13 @@ export async function renderReports(container, user) {
         </section>
 
         <p class="reports-footnote">
-          Ingredient cost as a share of sales is unavailable until ingredient cost data is added to the system.
+          Closing stock value is unavailable because the inventory report does not return unit cost.
         </p>
       `;
     };
 
-    const renderStaff = (range) => {
-      const filteredShifts = allShifts.filter((shift) =>
-        inRange(safeDate(shift.shiftDate), range)
-      );
-      const staffCashReport = getStaffCashReportForRange(range);
-      const reportKey = staffCashReportRangeKey(range);
-      const staffCashReportError = reportKey
-        ? staffCashReportErrors.get(reportKey)
-        : null;
+    const renderStaff = () => {
+      const filteredShifts = reportData.shifts;
 
       const flagged = filteredShifts.filter(
         (shift) =>
@@ -945,7 +716,6 @@ export async function renderReports(container, user) {
 
         <section class="reports-panel">
           <h2>Shift Reconciliation</h2>
-          ${staffCashReportError ? `<p class="alert" role="alert">${escapeHTML(staffCashReportError)}</p>` : ""}
           <div class="table-responsive">
             <table class="data-table">
               <thead>
@@ -967,16 +737,7 @@ export async function renderReports(container, user) {
                       const variance = Number(shift.cashDifference || 0);
                       const closed = shift.status === "Closed";
                       const review = closed && Math.abs(variance) > 0.009;
-                      const shiftCashRow = staffCashReport?.shiftCash.find(
-                        (row) => Number(row.shift_id) === shift.shiftId,
-                      );
-                      const cashierSalesRow = staffCashReport?.cashierSales.find(
-                        (row) => row.full_name === shift.staff,
-                      );
-                      const orderCount =
-                        shiftCashRow?.transaction_count ??
-                        shift.salesCount ??
-                        cashierSalesRow?.transaction_count;
+                      const orderCount = orderCountForShift(shift);
 
                       return `
                         <tr>
@@ -1003,56 +764,107 @@ export async function renderReports(container, user) {
         </section>
 
         <p class="reports-footnote">
-          Shift figures are based on recorded opening cash, cash sales, and counted cash. The current sample shift records belong to the staff member saved in the API.
+          Shift figures are based on the opening cash, cash sales, and counted cash returned for the selected date range.
         </p>
       `;
     };
 
-    const renderExceptions = (range) => {
-      const exceptions = getExceptions(getFilteredTransactions(range));
-
-      const voids = exceptions.filter((item) =>
-        String(item.type).toLowerCase().includes("void")
-      );
-
-      const refunds = exceptions.filter((item) =>
-        String(item.type).toLowerCase().includes("refund")
-      );
-
-      const discounts = exceptions.filter((item) =>
-        String(item.type).toLowerCase() === "discount"
-      );
-
-      const needsReview = exceptions.filter((item) =>
-        ["pending", "review"].includes(String(item.approval).toLowerCase())
-      );
+    const renderExceptions = () => {
+      const {
+        voids_refunds: reversals,
+        discount_exceptions: discountExceptions,
+        pending_requests: pendingRequests,
+      } = reportData.exceptions;
+      const voids = reversals.filter((item) => item.status === "Voided");
+      const refunds = reversals.filter((item) => item.status === "Refunded");
 
       return `
         <div class="reports-page-heading">
           <div>
             <button type="button" class="reports-back-btn" data-page="hub">← Reports Hub</button>
             <h1 class="page-title">Exceptions Report</h1>
-            <p class="muted">Audit log of voids, refunds, and discounts.</p>
+            <p class="muted">Recorded voids, refunds, and stock movement summaries.</p>
           </div>
         </div>
 
         <section class="reports-stat-grid">
           ${renderStat("Voids", number(voids.length))}
           ${renderStat("Refunds", number(refunds.length))}
-          ${renderStat("Discounts", number(discounts.length))}
-          ${renderStat("Needs Review", number(needsReview.length))}
+          ${renderStat("Discounts", number(discountExceptions.length))}
+          ${renderStat("Needs Review", number(pendingRequests.length))}
         </section>
 
-        ${
-          needsReview.length
-            ? `
-              <section class="reports-review-alert">
-                <strong>Manager review required</strong>
-                <p>Check the original order and the recorded reason before approving a void or refund request.</p>
-              </section>
-            `
-            : ""
-        }
+        <section class="reports-panel">
+          <h2>Discount Exceptions</h2>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Transaction ID</th>
+                  <th>Order No.</th>
+                  <th>Date</th>
+                  <th>Discount Type</th>
+                  <th>Discount Amount</th>
+                  <th>Total Due</th>
+                  <th>Processed By</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  discountExceptions.length
+                    ? discountExceptions.map((item) => `
+                      <tr>
+                        <td>${number(item.transaction_id)}</td>
+                        <td>${escapeHTML(item.order_number || "—")}</td>
+                        <td>${formatDateTime(safeDate(item.date_time))}</td>
+                        <td>${escapeHTML(item.discount_type || "—")}</td>
+                        <td>${peso(item.discount_amount)}</td>
+                        <td>${peso(item.total_due)}</td>
+                        <td>${escapeHTML(item.processed_by || "—")}</td>
+                      </tr>
+                    `).join("")
+                    : renderTableMessage("No discounted transactions for this date range.", 7)
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="reports-panel">
+          <h2>Pending Approval Requests</h2>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Request ID</th>
+                  <th>Transaction ID</th>
+                  <th>Order No.</th>
+                  <th>Request Type</th>
+                  <th>Reason</th>
+                  <th>Requested By</th>
+                  <th>Requested At</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  pendingRequests.length
+                    ? pendingRequests.map((item) => `
+                      <tr>
+                        <td>${number(item.request_id)}</td>
+                        <td>${number(item.transaction_id)}</td>
+                        <td>${escapeHTML(item.order_number || "—")}</td>
+                        <td>${escapeHTML(item.request_type || "—")}</td>
+                        <td>${escapeHTML(item.reason || "—")}</td>
+                        <td>${escapeHTML(item.requested_by || "—")}</td>
+                        <td>${formatDateTime(safeDate(item.requested_at))}</td>
+                      </tr>
+                    `).join("")
+                    : renderTableMessage("No pending requests for this date range.", 7)
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         <section class="reports-panel">
           <h2>Exception Audit Log</h2>
@@ -1062,65 +874,45 @@ export async function renderReports(container, user) {
                 <tr>
                   <th>Time</th>
                   <th>Order No.</th>
-                  <th>Type</th>
+                  <th>Status</th>
                   <th>Staff</th>
                   <th>Reason</th>
                   <th>Amount</th>
-                  <th>Approval Status</th>
                 </tr>
               </thead>
               <tbody>
                 ${
-                  exceptions.length
-                    ? exceptions.map((item) => `
+                  reversals.length
+                    ? reversals.map((item) => `
                       <tr>
-                        <td>${formatDateTime(item.date)}</td>
-                        <td>${escapeHTML(item.order)}</td>
-                        <td>${escapeHTML(item.type)}</td>
-                        <td>${escapeHTML(item.staff)}</td>
-                        <td>${escapeHTML(item.reason)}</td>
-                        <td>${peso(item.amount)}</td>
-                        <td>
-                          <span class="reports-status ${
-                            String(item.approval).toLowerCase() === "pending"
-                              ? "warning"
-                              : String(item.approval).toLowerCase() === "approved"
-                                ? "success"
-                                : "neutral"
-                          }">
-                            ${escapeHTML(item.approval)}
-                          </span>
-                        </td>
+                        <td>${formatDateTime(safeDate(item.date_time))}</td>
+                        <td>${escapeHTML(item.order_number || "—")}</td>
+                        <td>${escapeHTML(item.status || "—")}</td>
+                        <td>${escapeHTML(item.processed_by || "—")}</td>
+                        <td>${escapeHTML(item.void_refund_reason || "—")}</td>
+                        <td>${peso(item.total_due)}</td>
                       </tr>
                     `).join("")
-                    : renderTableMessage("No exceptions found for this date range.", 7)
+                    : renderTableMessage("No voided or refunded transactions for this date range.", 6)
                 }
               </tbody>
             </table>
           </div>
         </section>
 
-        <p class="reports-footnote">
-          Pending void/refund requests are displayed for review. This report does not approve or reverse transactions.
-        </p>
       `;
     };
 
-    const getExportRows = (range) => {
+    const getExportRows = () => {
       if (currentPage === "products") {
-        const products = getProductSales(getSalesTransactions(range))
-          .filter((item) =>
-            categoryFilter === "All" || item.category === categoryFilter
-          );
-
         return [
           ["Product", "SKU", "Category", "Units Sold", "Revenue"],
-          ...products.map((item) => [
+          ...reportData.products.map((item) => [
             item.name,
             item.sku,
-            item.category,
-            item.quantity,
-            item.revenue,
+            item.category_name || "—",
+            item.quantity_sold,
+            item.gross_revenue,
           ]),
         ];
       }
@@ -1128,12 +920,10 @@ export async function renderReports(container, user) {
       if (currentPage === "staff") {
         return [
           ["Staff", "Shift Date", "Orders", "Cash Sales", "Expected Cash", "Counted Cash", "Variance", "Status"],
-          ...allShifts.filter((shift) =>
-            inRange(safeDate(shift.shiftDate), range)
-          ).map((shift) => [
+          ...reportData.shifts.map((shift) => [
             shift.staff,
             shift.shiftDate,
-            shift.salesCount,
+            orderCountForShift(shift),
             shift.cashSales,
             shift.expectedCash,
             shift.actualCash,
@@ -1146,12 +936,12 @@ export async function renderReports(container, user) {
       if (currentPage === "inventory") {
         return [
           ["SKU", "Product", "Stock", "Unit", "Reorder Level", "Status"],
-          ...activeProducts.map((product) => [
+          ...reportData.inventory.map((product) => [
             product.sku,
             product.name,
-            product.stock,
+            product.current_stock,
             product.unit,
-            product.reorderLevel,
+            product.reorder_level,
             product.status,
           ]),
         ];
@@ -1159,46 +949,127 @@ export async function renderReports(container, user) {
 
       if (currentPage === "exceptions") {
         return [
-          ["Time", "Order", "Type", "Staff", "Reason", "Amount", "Approval"],
-          ...getExceptions(getFilteredTransactions(range)).map((item) => [
-            item.date?.toISOString() || "",
-            item.order,
-            item.type,
-            item.staff,
+          [
+            "Record Type", "Date", "Request ID", "Transaction ID", "Order",
+            "Status/Type", "Staff", "Reason", "Discount Amount", "Total Due",
+            "Product", "SKU", "Unit", "Stock In", "Stock Out", "Net Adjustment",
+          ],
+          ...reportData.exceptions.voids_refunds.map((item) => [
+            "Void/Refund",
+            item.date_time,
+            "",
+            item.transaction_id,
+            item.order_number,
+            item.status,
+            item.processed_by,
+            item.void_refund_reason,
+            "",
+            item.total_due,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+          ]),
+          ...reportData.exceptions.discount_exceptions.map((item) => [
+            "Discount",
+            item.date_time,
+            "",
+            item.transaction_id,
+            item.order_number,
+            item.discount_type,
+            item.processed_by,
+            "",
+            item.discount_amount,
+            item.total_due,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+          ]),
+          ...reportData.exceptions.pending_requests.map((item) => [
+            "Pending Request",
+            item.requested_at,
+            item.request_id,
+            item.transaction_id,
+            item.order_number,
+            item.request_type,
+            item.requested_by,
             item.reason,
-            item.amount,
-            item.approval,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+          ]),
+          ...reportData.exceptions.stock_movements.map((item) => [
+            "Stock Movement",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            item.name,
+            item.sku,
+            item.unit,
+            item.stock_in,
+            item.stock_out,
+            item.net_adjustment,
           ]),
         ];
       }
 
-      const sales = getSalesTransactions(range);
-
       return [
-        ["Date", "Order", "Staff", "Payment", "Gross Sales", "Discount", "Net Sales"],
-        ...sales.map((transaction) => [
-          transactionDate(transaction)?.toISOString() || "",
-          transaction.transactionId || transaction.orderNumber || "",
-          transaction.staff || "",
-          transaction.paymentMethod || transaction.payment || "",
-          transactionGross(transaction),
-          transactionDiscount(transaction),
-          transactionTotal(transaction),
+        ["Date", "Orders", "Gross Sales", "Discounts", "Net Sales"],
+        ...reportData.sales.daily_sales.map((day) => [
+          day.sale_date,
+          day.transaction_count,
+          day.gross_sales,
+          day.discounts,
+          day.net_sales,
         ]),
       ];
     };
 
     function render() {
-      const range = getRange(rangeMode, customStart, customEnd);
-
-      let pageContent = "";
-
-      if (currentPage === "hub") pageContent = renderHub(range);
-      if (currentPage === "sales") pageContent = renderSales(range);
-      if (currentPage === "products") pageContent = renderProducts(range);
-      if (currentPage === "inventory") pageContent = renderInventory(range);
-      if (currentPage === "staff") pageContent = renderStaff(range);
-      if (currentPage === "exceptions") pageContent = renderExceptions(range);
+      let pageContent;
+      if (loading) {
+        pageContent = `
+          <section class="reports-panel">
+            <p class="muted">Loading report data...</p>
+          </section>
+        `;
+      } else if (reportError) {
+        pageContent = `
+          <section class="reports-panel">
+            <p class="reports-error" role="alert">${escapeHTML(reportError)}</p>
+            <button type="button" class="reports-apply-btn" id="reports-retry">
+              Retry
+            </button>
+          </section>
+        `;
+      } else if (currentPage === "hub") {
+        pageContent = renderHub();
+      } else if (currentPage === "sales") {
+        pageContent = renderSales();
+      } else if (currentPage === "products") {
+        pageContent = renderProducts();
+      } else if (currentPage === "inventory") {
+        pageContent = renderInventory();
+      } else if (currentPage === "staff") {
+        pageContent = renderStaff();
+      } else {
+        pageContent = renderExceptions();
+      }
 
       container.innerHTML = `
         <div class="reports-page">
@@ -1209,15 +1080,22 @@ export async function renderReports(container, user) {
 
       container.querySelectorAll("[data-range]").forEach((button) => {
         button.addEventListener("click", () => {
-          rangeMode = button.dataset.range;
-          render();
+          if (button.dataset.range === "custom") {
+            const range = getCurrentRange();
+            rangeMode = "custom";
+            customStart = dateKey(range.start);
+            customEnd = dateKey(range.end);
+            render();
+          } else {
+            rangeMode = button.dataset.range;
+            loadReportData();
+          }
         });
       });
 
       container.querySelectorAll("[data-page]").forEach((button) => {
         button.addEventListener("click", () => {
           currentPage = button.dataset.page;
-          categoryFilter = "All";
           render();
         });
       });
@@ -1239,33 +1117,18 @@ export async function renderReports(container, user) {
 
           customStart = start;
           customEnd = end;
-          render();
+          loadReportData();
         });
 
-      container.querySelector("#reports-category-filter")
-        ?.addEventListener("change", (event) => {
-          categoryFilter = event.target.value;
-          render();
-        });
+      container.querySelector("#reports-retry")
+        ?.addEventListener("click", loadReportData);
 
       container.querySelector("#reports-export")
         ?.addEventListener("click", () => {
-          const rows = getExportRows(range);
+          const rows = getExportRows();
           downloadCSV(`lechon-de-jay-${currentPage}-report.csv`, rows);
         });
     }
 
-    render();
-
-  } catch (error) {
-    console.error("Reports loading error:", error);
-
-    container.innerHTML = `
-      <div class="reports-page">
-        <h1 class="page-title">Reports</h1>
-        <p class="muted">Unable to load reports.</p>
-        <p class="reports-error">${escapeHTML(error.message || "Unknown error")}</p>
-      </div>
-    `;
-  }
+    await loadReportData();
 }

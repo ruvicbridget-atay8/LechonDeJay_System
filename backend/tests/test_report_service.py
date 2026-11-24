@@ -137,6 +137,9 @@ def test_product_sales_report(mock_reports):
 
     assert "JOIN transactions t" in query
     assert "JOIN products p" in query
+    assert "JOIN categories c" in query
+    assert "c.category_name" in query
+    assert "c.category_name" in query.split("GROUP BY", 1)[1]
     assert "t.status = 'Completed'" in query
     assert "SUM(ti.quantity)" in query
     assert "gross_revenue DESC" in query
@@ -232,6 +235,49 @@ def test_void_refund_report(mock_reports):
     assert "t.approved_by_user_id" in query
     assert "t.date_time >= %s" in query
     assert len(params) == 2
+
+
+def test_discount_exception_report(mock_reports):
+    report_service.get_discount_exception_report(
+        1, "2026-11-01", "2026-11-18"
+    )
+
+    _, query, params = report_query(mock_reports)
+
+    assert "dt.discount_name AS discount_type" in query
+    assert "t.discount_amount > 0" in query
+    assert "t.status = 'Completed'" in query
+    assert "staff.full_name AS processed_by" in query
+    assert "t.transaction_id" in query
+    assert "t.order_number" in query
+    assert "t.date_time" in query
+    assert "dt.discount_name AS discount_type" in query
+    assert "t.total_due" in query
+    assert params == (date(2026, 11, 1), date(2026, 11, 19))
+
+
+def test_pending_request_report_matches_transaction_or_request_date(mock_reports):
+    report_service.get_pending_request_report(
+        1, "2026-11-01", "2026-11-18"
+    )
+
+    _, query, params = report_query(mock_reports)
+
+    assert "FROM approval_requests ar" in query
+    assert "ar.status = 'Pending'" in query
+    assert "t.date_time >= %s AND t.date_time < %s" in query
+    assert "ar.requested_at >= %s AND ar.requested_at < %s" in query
+    assert "requester.full_name AS requested_by" in query
+    assert "ar.request_id" in query
+    assert "t.transaction_id" in query
+    assert "t.order_number" in query
+    assert "ar.request_type" in query
+    assert "ar.reason" in query
+    assert "ar.requested_at" in query
+    assert params == (
+        date(2026, 11, 1), date(2026, 11, 19),
+        date(2026, 11, 1), date(2026, 11, 19),
+    )
 
 
 @pytest.mark.parametrize("function_name", [

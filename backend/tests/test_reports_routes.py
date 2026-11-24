@@ -80,11 +80,16 @@ def test_staff_cash_report(client):
 
 
 def test_exceptions_report(client):
-    with login(client), patch("app.routes.reports.report_service.get_void_refund_report", return_value=[]) as voids, patch("app.routes.reports.report_service.get_stock_movement_report", return_value=[]) as movements:
+    with login(client), patch("app.routes.reports.report_service.get_void_refund_report", return_value=[]) as voids, patch("app.routes.reports.report_service.get_discount_exception_report", return_value=[]) as discounts, patch("app.routes.reports.report_service.get_pending_request_report", return_value=[]) as pending, patch("app.routes.reports.report_service.get_stock_movement_report", return_value=[]) as movements:
         response = client.get("/reports/exceptions" + DATES)
     assert response.status_code == 200
-    assert set(response.json["data"]) == {"voids_refunds", "stock_movements"}
+    assert set(response.json["data"]) == {
+        "voids_refunds", "discount_exceptions", "pending_requests",
+        "stock_movements",
+    }
     voids.assert_called_once_with(1, "2026-11-01", "2026-11-30")
+    discounts.assert_called_once_with(1, "2026-11-01", "2026-11-30")
+    pending.assert_called_once_with(1, "2026-11-01", "2026-11-30")
     movements.assert_called_once_with(1, "2026-11-01", "2026-11-30")
 
 

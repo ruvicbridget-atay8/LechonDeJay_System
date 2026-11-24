@@ -98,6 +98,12 @@ def exceptions_report():
                 "voids_refunds": report_service.get_void_refund_report(
                     user_id, start_date, end_date
                 ),
+                "discount_exceptions": report_service.get_discount_exception_report(
+                    user_id, start_date, end_date
+                ),
+                "pending_requests": report_service.get_pending_request_report(
+                    user_id, start_date, end_date
+                ),
                 "stock_movements": report_service.get_stock_movement_report(
                     user_id, start_date, end_date
                 ),
