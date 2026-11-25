@@ -2,13 +2,13 @@
 const readData = (id) =>
   JSON.parse(document.getElementById(id)?.textContent || "[]");
 
-const API_BASE_URL = `http://${window.location.hostname || "127.0.0.1"}:5000`;
+const API_BASE_URL = "https://lechon-de-jay-system.onrender.com";
 let memorySession = null;
 
 // ---------- Login and Session ----------
 function sessionUser(data) {
   if (
-    !data ||
+    !data |
     data.authenticated === false ||
     data.user_id == null ||
     typeof data.full_name !== "string" ||
