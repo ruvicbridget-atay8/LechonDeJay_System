@@ -35,7 +35,15 @@ if not Config.SECRET_KEY:
 app.config["SECRET_KEY"] = Config.SECRET_KEY
 
 # Enable CORS
-CORS(app, supports_credentials=True, origins=["http://127.0.0.1:5500"])
+CORS(
+    app,
+    supports_credentials=True,
+    origins=[
+        "http://127.0.0.1:5500",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ],
+)
 
 # Health check
 @app.route("/health")

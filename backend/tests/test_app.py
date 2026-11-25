@@ -19,6 +19,21 @@ def test_health_endpoint():
     assert response.get_json() == {"status": "ok"}
 
 
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://localhost:5500",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ],
+)
+def test_docker_frontend_origins_can_use_session_api(origin):
+    response = app.test_client().get("/health", headers={"Origin": origin})
+
+    assert response.headers["Access-Control-Allow-Origin"] == origin
+    assert response.headers["Access-Control-Allow-Credentials"] == "true"
+
+
 # Checks unauthenticated status and role restrictions for auth endpoints.
 def test_auth_endpoints_report_unauthenticated_and_reject_disallowed_users(monkeypatch):
     from app.services import auth_service

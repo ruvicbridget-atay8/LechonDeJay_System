@@ -1,0 +1,61 @@
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: lechondejay_db
+      MYSQL_USER: "${DB_USER:-lechon_app}"
+      MYSQL_PASSWORD: "${DB_PASSWORD:?Set DB_PASSWORD in your shell}"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in your shell}"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/migrations/discount_types.sql:/docker-entrypoint-initdb.d/02-discount-types.sql:ro
+      - ./database/migrations/product_is_addon.sql:/docker-entrypoint-initdb.d/03-product-is-addon.sql:ro
+      - ./database/triggers.sql:/docker-entrypoint-initdb.d/04-triggers.sql:ro
+      - ./database/seed_data.sql:/docker-entrypoint-initdb.d/05-seed-data.sql:ro
+      - ./database/approval_request.sql:/docker-entrypoint-initdb.d/06-approval-requests.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USER: "${DB_USER:-lechon_app}"
+      DB_PASSWORD: "${DB_PASSWORD:?Set DB_PASSWORD in your shell}"
+      DB_NAME: lechondejay_db
+      SECRET_KEY: "${SECRET_KEY:?Set SECRET_KEY in your shell}"
+      CLOUDINARY_CLOUD_NAME: "${CLOUDINARY_CLOUD_NAME:-}"
+      CLOUDINARY_API_KEY: "${CLOUDINARY_API_KEY:-}"
+      CLOUDINARY_API_SECRET: "${CLOUDINARY_API_SECRET:-}"
+    ports:
+      - "127.0.0.1:5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:5000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  mysql_data:

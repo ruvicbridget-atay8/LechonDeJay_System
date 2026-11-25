@@ -2,7 +2,7 @@
 const readData = (id) =>
   JSON.parse(document.getElementById(id)?.textContent || "[]");
 
-const API_BASE_URL = "http://127.0.0.1:5000";
+const API_BASE_URL = `http://${window.location.hostname || "127.0.0.1"}:5000`;
 let memorySession = null;
 
 // ---------- Login and Session ----------
