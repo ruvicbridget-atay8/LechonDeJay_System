@@ -1,0 +1,9 @@
+.env
+.vscode
+__pycache__/
+*.pyc
+venv/
+.venv/
+.pytest_cache/
+database/*
+database/schema.sql
