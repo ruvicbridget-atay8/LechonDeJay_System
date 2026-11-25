@@ -17,7 +17,10 @@ class Config:
     DB_USER = os.getenv("DB_USER")
     DB_PASSWORD = os.getenv("DB_PASSWORD")
     DB_NAME = os.getenv("DB_NAME")
-    FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "")
+    FRONTEND_ORIGIN = (
+        os.getenv("FRONTEND_ORIGIN")
+        or "https://lechon-de-jay-system.onrender.com"
+    )
     
     SECRET_KEY = os.getenv("SECRET_KEY")
     CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
