@@ -11,6 +11,17 @@ import run
 
 app = run.app
 
+
+def test_root_endpoint_reports_api_status():
+    response = app.test_client().get("/")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "status": "success",
+        "message": "Lechon De Jay API is running.",
+    }
+
+
 # Checks the health endpoint. Expected: HTTP 200 with {"status": "ok"}.
 def test_health_endpoint():
     client = app.test_client()
