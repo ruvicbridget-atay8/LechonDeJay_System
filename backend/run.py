@@ -52,6 +52,10 @@ frontend_origins = [
     for origin in Config.FRONTEND_ORIGIN.split(",")
     if origin.strip()
 ]
+frontend_origins.extend([
+    "https://lechondejay-system.onrender.com",
+    "https://lechon-de-jay-system.onrender.com",
+])
 
 CORS(
     app,

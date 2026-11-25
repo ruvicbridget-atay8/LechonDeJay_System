@@ -36,6 +36,8 @@ def test_health_endpoint():
         "http://localhost:5500",
         "http://localhost:8080",
         "http://127.0.0.1:8080",
+        "https://lechondejay-system.onrender.com",
+        "https://lechon-de-jay-system.onrender.com",
     ],
 )
 def test_docker_frontend_origins_can_use_session_api(origin):
