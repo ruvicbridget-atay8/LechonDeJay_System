@@ -34,16 +34,29 @@ if not Config.SECRET_KEY:
     raise RuntimeError("SECRET_KEY must be configured in the environment.")
 app.config["SECRET_KEY"] = Config.SECRET_KEY
 
+if Config.IS_PRODUCTION:
+    app.config.update(
+        SESSION_COOKIE_SAMESITE="None",
+        SESSION_COOKIE_SECURE=True,
+    )
+
 # Enable CORS
+local_origins = [
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+]
+frontend_origins = [
+    origin.strip().rstrip("/")
+    for origin in Config.FRONTEND_ORIGIN.split(",")
+    if origin.strip()
+]
+
 CORS(
     app,
     supports_credentials=True,
-    origins=[
-        "http://localhost:5500",
-        "http://127.0.0.1:5500",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080",
-    ],
+    origins=list(dict.fromkeys(local_origins + frontend_origins)),
 )
 
 
