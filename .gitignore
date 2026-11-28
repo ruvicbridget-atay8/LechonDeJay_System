@@ -7,3 +7,4 @@ venv/
 .pytest_cache/
 database/*
 database/schema.sql
+!database/schema_db.sql

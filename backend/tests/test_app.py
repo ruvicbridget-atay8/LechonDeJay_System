@@ -47,6 +47,23 @@ def test_docker_frontend_origins_can_use_session_api(origin):
     assert response.headers["Access-Control-Allow-Credentials"] == "true"
 
 
+# Ensures cross-origin JSON POST preflights include a browser cache duration.
+def test_json_post_preflight_is_cached():
+    origin = "https://lechondejay-system.onrender.com"
+    response = app.test_client().options(
+        "/transactions/checkout",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == origin
+    assert response.headers["Access-Control-Max-Age"] == "600"
+
+
 # Checks unauthenticated status and role restrictions for auth endpoints.
 def test_auth_endpoints_report_unauthenticated_and_reject_disallowed_users(monkeypatch):
     from app.services import auth_service
@@ -238,3 +255,21 @@ def test_db_transaction_commits_or_rolls_back_safely(monkeypatch):
     )
     assert unknown_signal.status == 400
     assert unknown_signal.message == "The operation was rejected by a business rule."
+
+
+# Ensures queries reuse the lazily initialized connection pool.
+def test_get_connection_reuses_pool(monkeypatch):
+    from app.services import database_service
+
+    pool = MagicMock()
+    pool_factory = MagicMock(return_value=pool)
+    monkeypatch.setattr(database_service, "_connection_pool", None)
+    monkeypatch.setattr(database_service, "MySQLConnectionPool", pool_factory)
+
+    first = database_service.get_connection()
+    second = database_service.get_connection()
+
+    assert first is pool.get_connection.return_value
+    assert second is first
+    pool_factory.assert_called_once()
+    assert pool_factory.call_args.kwargs["pool_size"] == 2
