@@ -41,6 +41,7 @@ if Config.IS_PRODUCTION:
     )
 
 # Enable CORS
+# Cache preflight approval to reduce repeated OPTIONS round trips.
 local_origins = [
     "http://localhost:5500",
     "http://127.0.0.1:5500",
@@ -61,6 +62,7 @@ CORS(
     app,
     supports_credentials=True,
     origins=list(dict.fromkeys(local_origins + frontend_origins)),
+    max_age=600,
 )
 
 

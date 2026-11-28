@@ -665,6 +665,8 @@ export async function renderPos(container, user) {
         change: saved.change,
       };
       resetOrder();
+      // The order succeeded; don't leave the covered checkout button saying "Saving...".
+      placeBtn.textContent = "Place Order";
       showOrderPlaced(summary, () => {
         location.hash = "#/transactions";
       });

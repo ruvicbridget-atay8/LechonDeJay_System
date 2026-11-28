@@ -1,9 +1,15 @@
 from contextlib import contextmanager
 import logging
+from threading import Lock
 
 import mysql.connector
+from mysql.connector.pooling import MySQLConnectionPool
 
 from config import Config
+
+# Keep a small pool per worker to avoid reconnecting for every query.
+_connection_pool = None
+_connection_pool_lock = Lock()
 
 
 class DatabaseError(Exception):
@@ -69,13 +75,23 @@ _SAFE_TRIGGER_MESSAGES = frozenset({
 
 
 def get_connection():
-    return mysql.connector.connect(
-        host=Config.DB_HOST,
-        port=Config.DB_PORT,
-        user=Config.DB_USER,
-        password=Config.DB_PASSWORD,
-        database=Config.DB_NAME,
-    )
+    global _connection_pool
+
+    # Initialize lazily so importing the application doesn't connect to MySQL.
+    if _connection_pool is None:
+        with _connection_pool_lock:
+            if _connection_pool is None:
+                _connection_pool = MySQLConnectionPool(
+                    pool_name="lechon_de_jay",
+                    pool_size=2,
+                    host=Config.DB_HOST,
+                    port=Config.DB_PORT,
+                    user=Config.DB_USER,
+                    password=Config.DB_PASSWORD,
+                    database=Config.DB_NAME,
+                )
+
+    return _connection_pool.get_connection()
 
 
 def translate_error(err):
